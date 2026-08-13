@@ -152,7 +152,7 @@ async function api(request, response, url) {
     return json(response, 200, {
       ok: true,
       service: "mooncode",
-      version: "1.0.0",
+      version: "1.1.0",
       uptime: Math.round(process.uptime()),
       workspace: workspaceRoot,
       isDemoWorkspace: workspaceRoot === path.resolve(root, "workspace"),
@@ -170,6 +170,43 @@ async function api(request, response, url) {
       sessions: ((await stateStore.read()).sessions || []).length,
       approvalsPending: ((await stateStore.read()).approvals || []).filter((a) => a.status === "pending").length,
     });
+  }
+
+  // v1.1.0: Update check endpoint — lets the UI show update notifications.
+  if (method === "GET" && pathname === "/api/updates/check") {
+    try {
+      const releaseResponse = await fetch("https://api.github.com/repos/qbrahym02-cmyk/mooncode/releases/latest", {
+        headers: { "user-agent": "mooncode-server/1.1.0" },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!releaseResponse.ok) {
+        return json(response, 200, { updateAvailable: false, reason: "GitHub API error" });
+      }
+      const release = await releaseResponse.json();
+      const latest = (release.tag_name || "").replace(/^v/, "");
+      const current = "1.0.0";
+      const compare = (a, b) => {
+        const pa = String(a).split(".").map(Number);
+        const pb = String(b).split(".").map(Number);
+        for (let i = 0; i < 3; i += 1) {
+          if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+          if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+        }
+        return 0;
+      };
+      const updateAvailable = compare(latest, current) > 0;
+      return json(response, 200, {
+        updateAvailable,
+        current,
+        latest: latest || null,
+        releaseName: release.name || null,
+        releaseUrl: release.html_url || null,
+        releaseNotes: release.body?.slice(0, 500) || null,
+        publishedAt: release.published_at || null,
+      });
+    } catch (error) {
+      return json(response, 200, { updateAvailable: false, reason: error.message });
+    }
   }
 
   // Workspace switch API: lets the user point Moon Code at a different directory
