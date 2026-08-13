@@ -218,7 +218,7 @@ export class Workspace {
     const method = String(options.method || "GET").toUpperCase();
     if (!/^https?:\/\//.test(url)) throw new Error("Only http(s) URLs are allowed");
     const maxBytes = Math.min(Number(options.maxBytes ?? 500_000), 2_000_000);
-    const headers = { "user-agent": "Zetora/0.9.0", ...(options.headers || {}) };
+    const headers = { "user-agent": "mooncode/0.9.0", ...(options.headers || {}) };
     const init = { method, headers, signal: AbortSignal.timeout(30_000) };
     if (options.body && ["POST", "PUT", "PATCH"].includes(method)) {
       init.body = options.body;
@@ -435,7 +435,7 @@ export class Workspace {
     }
     const timeout = Math.min(Number(options.timeout ?? 30_000), 120_000);
     return new Promise((resolve, reject) => {
-      const child = spawn(command, { cwd: this.root, shell: true, env: { ...process.env, ZETORA_AGENT: "1" } });
+      const child = spawn(command, { cwd: this.root, shell: true, env: { ...process.env, MOONCODE_AGENT: "1" } });
       let stdout = "";
       let stderr = "";
       let truncated = false;
@@ -462,7 +462,7 @@ export class Workspace {
       // v0.9.1: ENOENT is the expected "does not exist" case. Other errors
       // (EACCES, EBUSY) should ideally be surfaced, but exists() must never
       // throw — callers rely on a boolean. Log to stderr for visibility.
-      if (error?.code !== "ENOENT") console.warn(`[zetora] exists(${relative}) failed: ${error.message}`);
+      if (error?.code !== "ENOENT") console.warn(`[mooncode] exists(${relative}) failed: ${error.message}`);
       return false;
     }
   }

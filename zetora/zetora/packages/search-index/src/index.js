@@ -39,7 +39,7 @@ export class SearchIndex {
       // v0.9.1: ENOENT is expected (file deleted between walk and index), but
       // other errors (permissions, encoding) should be visible in logs.
       if (error?.code !== "ENOENT") {
-        console.warn(`[zetora] search-index failed to index ${relativePath}: ${error.message}`);
+        console.warn(`[mooncode] search-index failed to index ${relativePath}: ${error.message}`);
       }
       return null;
     }
@@ -99,7 +99,7 @@ export class SearchIndex {
 
   async #walk() {
     const { readdir } = await import("node:fs/promises");
-    const SKIP = new Set([".git", "node_modules", "dist", "build", ".zetora"]);
+    const SKIP = new Set([".git", "node_modules", "dist", "build", ".mooncode"]);
     const out = [];
     const walk = async (dir) => {
       const entries = await readdir(dir, { withFileTypes: true });

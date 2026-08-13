@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════════════════
-# Zetora .gitignore
+# Moon Code .gitignore
 # ════════════════════════════════════════════════════════════════════════════
 
 # ─── Secrets & Environment ────────────────────────────────────────────────
@@ -11,11 +11,11 @@
 .env.staging
 
 # ─── Runtime Data ──────────────────────────────────────────────────────────
-# Zetora's data directory (sessions, approvals, audit log, MCP config, uploads).
-.zetora/
+# Moon Code's data directory (sessions, approvals, audit log, MCP config, uploads).
+.mooncode/
 
-# Zetora's worktrees (created by the `worktree` tool).
-.zetora-worktrees/
+# Moon Code's worktrees (created by the `worktree` tool).
+.mooncode-worktrees/
 
 # The demo workspace — users replace this with their own project.
 # We keep the workspace/ directory in git for the demo, but ignore its

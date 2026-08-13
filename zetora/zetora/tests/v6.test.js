@@ -9,7 +9,7 @@ import { CollabSession, CollabRegistry } from "../packages/collab/src/index.js";
 import { PluginRegistry } from "../packages/plugins/src/index.js";
 
 test("search index builds and queries trigrams", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-sidx-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-sidx-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const idx = new SearchIndex(root);
   await writeFile(path.join(root, "a.js"), "function helloWorld() { return 1; }\n");
@@ -22,7 +22,7 @@ test("search index builds and queries trigrams", async (t) => {
 });
 
 test("search index ranks by trigram overlap", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-sidx-rank-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-sidx-rank-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const idx = new SearchIndex(root);
   await writeFile(path.join(root, "exact.js"), "function fetchUser() {}\n");
@@ -75,7 +75,7 @@ test("collab registry create/list/close", () => {
 });
 
 test("plugin registry install/list/uninstall", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-plugins-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-plugins-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const reg = new PluginRegistry(root);
   const manifest = {

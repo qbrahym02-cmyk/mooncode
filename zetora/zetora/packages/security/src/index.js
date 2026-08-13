@@ -8,13 +8,13 @@ import path from "node:path";
  * Unlike the v0.6 SHA-256 hash (which anyone could forge because there was no
  * private key), this uses real public-key cryptography:
  *
- * - The Zetora team holds a private key.
- * - The public key is shipped with Zetora.
+ * - The Moon Code team holds a private key.
+ * - The public key is shipped with Moon Code.
  * - Plugins signed by the private key can be verified by anyone.
  * - Malicious plugins cannot be "signed" by an attacker without the private key.
  *
  * This is still a trust-on-first-use model: the public key is pinned to the
- * Zetora install. A production registry would use a certificate chain.
+ * Moon Code install. A production registry would use a certificate chain.
  */
 
 const KEY_ALGORITHM = "ed25519";
@@ -47,7 +47,7 @@ export class PluginSigner {
       // ENOENT is expected (keys not generated yet); other errors (permissions,
       // invalid PEM) should be visible to help debugging.
       if (error?.code !== "ENOENT") {
-        console.warn(`[zetora] failed to load plugin signing private key: ${error.message}`);
+        console.warn(`[mooncode] failed to load plugin signing private key: ${error.message}`);
       }
       return null;
     }
@@ -59,7 +59,7 @@ export class PluginSigner {
       return createPublicKey(pem);
     } catch (error) {
       if (error?.code !== "ENOENT") {
-        console.warn(`[zetora] failed to load plugin signing public key: ${error.message}`);
+        console.warn(`[mooncode] failed to load plugin signing public key: ${error.message}`);
       }
       return null;
     }

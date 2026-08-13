@@ -11,13 +11,13 @@ const SHUTDOWN_GRACE_MS = 1_500;
  * Minimal Model Context Protocol (MCP) client over stdio transport.
  *
  * The MCP spec defines a JSON-RPC 2.0 protocol where a server exposes tools,
- * resources, and prompts. This client implements the subset needed by Zetora:
+ * resources, and prompts. This client implements the subset needed by Moon Code:
  * `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`,
  * and `prompts/list`. It deliberately avoids any third-party SDK so the agent
  * runtime stays dependency-free.
  *
  * Servers are spawned as child processes via stdio. Their config lives in
- * `.zetora/mcp.json` so users can opt into servers per workspace.
+ * `.mooncode/mcp.json` so users can opt into servers per workspace.
  */
 export class McpClient extends EventEmitter {
   constructor({ id, command, args = [], env = {}, cwd } = {}) {
@@ -71,7 +71,7 @@ export class McpClient extends EventEmitter {
     const result = await this.#request("initialize", {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: { roots: { listChanged: false } },
-      clientInfo: { name: "zetora", version: "0.9.0" },
+      clientInfo: { name: "mooncode", version: "0.9.0" },
     });
     this.serverInfo = result.serverInfo;
     this.serverCapabilities = result.capabilities;
@@ -187,7 +187,7 @@ export class McpError extends Error {
 }
 
 /**
- * Registry of running MCP clients, configured via `.zetora/mcp.json`.
+ * Registry of running MCP clients, configured via `.mooncode/mcp.json`.
  * The schema is an object whose keys are server ids and values are
  * `{ command, args, env, cwd }` entries.
  */

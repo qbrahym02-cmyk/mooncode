@@ -108,7 +108,7 @@ export class PtySession extends EventEmitter {
   send(command, options = {}) {
     if (!this.child || this.closed) return Promise.reject(new Error("PtySession is closed"));
     if (this.pending) return Promise.reject(new Error("Another command is still running on this session"));
-    const sentinel = `__ZETORA_DONE_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}__`;
+    const sentinel = `__MOONCODE_DONE_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}__`;
     const echoCode = `echo "${sentinel}.$?"`;
     return new Promise((resolve, reject) => {
       const timeout = Math.min(Number(options.timeout ?? 30_000), 180_000);

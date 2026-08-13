@@ -14,7 +14,7 @@ test("detectKind recognises common types", () => {
 });
 
 test("renderArtifact passes HTML through unchanged", async (t) => {
-  const root = mkdtempSync(path.join(os.tmpdir(), "zetora-art-"));
+  const root = mkdtempSync(path.join(os.tmpdir(), "mooncode-art-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const file = path.join(root, "page.html");
   writeFileSync(file, "<!doctype html><p>hello</p>");
@@ -23,7 +23,7 @@ test("renderArtifact passes HTML through unchanged", async (t) => {
 });
 
 test("renderArtifact wraps markdown in a styled shell", async (t) => {
-  const root = mkdtempSync(path.join(os.tmpdir(), "zetora-md-"));
+  const root = mkdtempSync(path.join(os.tmpdir(), "mooncode-md-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const file = path.join(root, "notes.md");
   writeFileSync(file, "# Heading\n\nSome **bold** text.");
@@ -33,7 +33,7 @@ test("renderArtifact wraps markdown in a styled shell", async (t) => {
 });
 
 test("renderArtifact exposes images via data URI", async (t) => {
-  const root = mkdtempSync(path.join(os.tmpdir(), "zetora-img-"));
+  const root = mkdtempSync(path.join(os.tmpdir(), "mooncode-img-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   // Build a tiny valid PNG (1x1 transparent).
   const png = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c636000000000050001005e9272d80000000049454e44ae426082", "hex");

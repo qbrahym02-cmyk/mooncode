@@ -10,7 +10,7 @@ const MAX_ROTATED_FILES = 5; // keep up to 5 rotated files (audit.ndjson.1 .. .5
  * command execution, plugin installs, approvals, workspace switches, etc.
  *
  * Every entry is immutable and timestamped. The log is stored as NDJSON at
- * `.zetora/audit.log` so it can be inspected with standard tools (grep, jq).
+ * `.mooncode/audit.log` so it can be inspected with standard tools (grep, jq).
  *
  * v0.9.1: added log rotation. When the log file exceeds `maxBytes` (default
  * 10MB), it is renamed to `audit.ndjson.1` and a new file is started. Up to

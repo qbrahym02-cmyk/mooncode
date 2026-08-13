@@ -47,7 +47,7 @@
 - [ ] Reproduducible snapshots.
 - [ ] Design critique and accessibility evaluators.
 
-**Exit:** brief → design variants → review → export without leaving Zetora.
+**Exit:** brief → design variants → review → export without leaving Moon Code.
 
 ## Phase 3 — product clients
 

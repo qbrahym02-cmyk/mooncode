@@ -38,9 +38,9 @@ const state = {
   bootstrap: null,
   running: false,
   mode: 'build',
-  provider: localStorage.getItem('zetora.provider') || 'demo',
-  model: localStorage.getItem('zetora.model') || 'demo-local',
-  baseUrl: localStorage.getItem('zetora.baseUrl') || '',
+  provider: localStorage.getItem('mooncode.provider') || 'demo',
+  model: localStorage.getItem('mooncode.model') || 'demo-local',
+  baseUrl: localStorage.getItem('mooncode.baseUrl') || '',
   sessionId: 'welcome',
   transcript: [],
   files: [],
@@ -49,8 +49,8 @@ const state = {
   pendingImage: null,
   git: null,
   treeRefreshTimer: null,
-  voiceAutoSend: localStorage.getItem('zetora.voiceAutoSend') !== 'false',
-  voiceLang: localStorage.getItem('zetora.voiceLang') || 'ar-SA',
+  voiceAutoSend: localStorage.getItem('mooncode.voiceAutoSend') !== 'false',
+  voiceLang: localStorage.getItem('mooncode.voiceLang') || 'ar-SA',
 };
 
 const timeline = $('#timeline');
@@ -233,7 +233,7 @@ function selectSession(session) {
 }
 
 function renderHero() {
-  timeline.innerHTML = `<div class="hero-intro"><div class="hero-orbit"><span></span><svg viewBox="0 0 32 32"><path d="M7 5h8v8H7zM17 5h8v8h-8zM7 15h8v12H7zM17 15h8v5h-8zM17 22h8v5h-8z"/></svg></div><p class="eyebrow">ZETORA WORKSPACE</p><h2>ماذا سنبني اليوم؟</h2><p>وكيل واحد للبرمجة والتصميم، يفهم مشروعك ويعرض كل خطوة قبل تنفيذها.</p><div class="starter-grid"><button data-starter="حلّل بنية المشروع ثم اقترح خطة تحسين عملية">${icons.scan}<span><strong>تحليل المشروع</strong><small>خريطة بنية ومخاطر وخطة</small></span></button><button data-starter="صمّم واجهة أصلية متجاوبة لهذا المشروع وأنشئها كـ artifact">${icons.layers}<span><strong>إنشاء تصميم</strong><small>واجهة ومعاينة قابلة للتعديل</small></span></button><button data-starter="ابحث عن الأخطاء المحتملة وشغّل الاختبارات الآمنة">${icons.bug}<span><strong>فحص الجودة</strong><small>أخطاء واختبارات وإصلاحات</small></span></button></div></div>`;
+  timeline.innerHTML = `<div class="hero-intro"><div class="hero-orbit"><span></span><svg viewBox="0 0 32 32"><path d="M7 5h8v8H7zM17 5h8v8h-8zM7 15h8v12H7zM17 15h8v5h-8zM17 22h8v5h-8z"/></svg></div><p class="eyebrow">MOONCODE WORKSPACE</p><h2>ماذا سنبني اليوم؟</h2><p>وكيل واحد للبرمجة والتصميم، يفهم مشروعك ويعرض كل خطوة قبل تنفيذها.</p><div class="starter-grid"><button data-starter="حلّل بنية المشروع ثم اقترح خطة تحسين عملية">${icons.scan}<span><strong>تحليل المشروع</strong><small>خريطة بنية ومخاطر وخطة</small></span></button><button data-starter="صمّم واجهة أصلية متجاوبة لهذا المشروع وأنشئها كـ artifact">${icons.layers}<span><strong>إنشاء تصميم</strong><small>واجهة ومعاينة قابلة للتعديل</small></span></button><button data-starter="ابحث عن الأخطاء المحتملة وشغّل الاختبارات الآمنة">${icons.bug}<span><strong>فحص الجودة</strong><small>أخطاء واختبارات وإصلاحات</small></span></button></div></div>`;
 }
 
 function clearHero() { $('.hero-intro', timeline)?.remove(); }
@@ -299,7 +299,7 @@ function appendMessage(role, content = '', shouldScroll = true) {
     bubble.textContent = content;
     wrapper.append(bubble);
   } else {
-    wrapper.innerHTML = `<div class="assistant-avatar"><svg viewBox="0 0 32 32"><path d="M7 5h8v8H7zM17 5h8v8h-8zM7 15h8v12H7zM17 15h8v5h-8zM17 22h8v5h-8z"/></svg></div><div class="message-content"><div class="assistant-text"></div><div class="message-meta">ZETORA · <span>الآن</span></div></div>`;
+    wrapper.innerHTML = `<div class="assistant-avatar"><svg viewBox="0 0 32 32"><path d="M7 5h8v8H7zM17 5h8v8h-8zM7 15h8v12H7zM17 15h8v5h-8zM17 22h8v5h-8z"/></svg></div><div class="message-content"><div class="assistant-text"></div><div class="message-meta">MOONCODE · <span>الآن</span></div></div>`;
     const text = $('.assistant-text', wrapper);
     if (content) text.innerHTML = renderMarkdown(content);
   }
@@ -425,7 +425,7 @@ async function sendMessage(text = prompt.value.trim()) {
         provider: state.provider,
         model: state.model,
         baseUrl: state.baseUrl || undefined,
-        apiKey: sessionStorage.getItem('zetora.apiKey') || undefined,
+        apiKey: sessionStorage.getItem('mooncode.apiKey') || undefined,
         stream: true,
       }),
     });
@@ -500,11 +500,11 @@ function toggleTerminal() {
 async function runTerminal(command, approved = false) {
   const output = $('#terminal-output');
   const line = document.createElement('div');
-  line.innerHTML = '<span class="terminal-prompt">zetora ›</span> ';
+  line.innerHTML = '<span class="terminal-prompt">mooncode ›</span> ';
   line.append(document.createTextNode(command));
   output.append(line);
   try {
-    const response = await fetch('/api/terminal', { method: 'POST', headers: { 'content-type': 'application/json', ...(approved ? { 'x-zetora-confirm': 'execute' } : {}) }, body: JSON.stringify({ command }) });
+    const response = await fetch('/api/terminal', { method: 'POST', headers: { 'content-type': 'application/json', ...(approved ? { 'x-mooncode-confirm': 'execute' } : {}) }, body: JSON.stringify({ command }) });
     const result = await response.json();
     if (response.status === 202 && result.approvalRequired) {
       const accepted = window.confirm(`السماح بتنفيذ هذا الأمر داخل المشروع؟\n\n${command}`);
@@ -526,7 +526,7 @@ function openSettings() {
   $('#provider-select').value = state.provider;
   $('#settings-model').value = state.model;
   $('#settings-base-url').value = state.baseUrl;
-  $('#settings-api-key').value = sessionStorage.getItem('zetora.apiKey') || '';
+  $('#settings-api-key').value = sessionStorage.getItem('mooncode.apiKey') || '';
   updateProviderFields();
   dialog.showModal();
 }
@@ -543,11 +543,11 @@ function saveSettings() {
   state.provider = $('#provider-select').value;
   state.model = $('#settings-model').value.trim() || 'demo-local';
   state.baseUrl = $('#settings-base-url').value.trim();
-  localStorage.setItem('zetora.provider', state.provider);
-  localStorage.setItem('zetora.model', state.model);
-  localStorage.setItem('zetora.baseUrl', state.baseUrl);
+  localStorage.setItem('mooncode.provider', state.provider);
+  localStorage.setItem('mooncode.model', state.model);
+  localStorage.setItem('mooncode.baseUrl', state.baseUrl);
   const key = $('#settings-api-key').value.trim();
-  if (key) sessionStorage.setItem('zetora.apiKey', key); else sessionStorage.removeItem('zetora.apiKey');
+  if (key) sessionStorage.setItem('mooncode.apiKey', key); else sessionStorage.removeItem('mooncode.apiKey');
   $('#model-label').textContent = state.model;
   $('#session-model-label').textContent = state.model;
   $('#settings-dialog').close();
@@ -590,9 +590,9 @@ async function refreshFiles() {
 }
 
 function exportSession() {
-  const markdown = [`# ${$('#session-title').textContent}`, '', ...state.transcript.map((item) => `## ${item.role === 'user' ? 'User' : 'Zetora'}\n\n${item.content}\n`) ].join('\n');
+  const markdown = [`# ${$('#session-title').textContent}`, '', ...state.transcript.map((item) => `## ${item.role === 'user' ? 'User' : 'Moon Code'}\n\n${item.content}\n`) ].join('\n');
   const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown' }));
-  const anchor = document.createElement('a'); anchor.href = url; anchor.download = `zetora-session-${new Date().toISOString().slice(0, 10)}.md`; anchor.click();
+  const anchor = document.createElement('a'); anchor.href = url; anchor.download = `mooncode-session-${new Date().toISOString().slice(0, 10)}.md`; anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   toast('تم تصدير الجلسة', 'share');
 }
@@ -697,7 +697,7 @@ async function compactSession() {
       body: JSON.stringify({
         sessionId: state.sessionId,
         provider: state.provider, model: state.model,
-        apiKey: sessionStorage.getItem('zetora.apiKey') || undefined,
+        apiKey: sessionStorage.getItem('mooncode.apiKey') || undefined,
         baseUrl: state.baseUrl || undefined,
       }),
     });
@@ -1045,7 +1045,7 @@ window.addEventListener('beforeinstallprompt', (event) => {
   event.preventDefault();
   deferredPrompt = event;
   // Show an install button in the toast region.
-  toast('تثبيت Zetora كتطبيق؟', 'command', 8000);
+  toast('تثبيت Moon Code كتطبيق؟', 'command', 8000);
   // Auto-show after 3 seconds if user doesn't dismiss.
   setTimeout(() => {
     if (deferredPrompt) {
@@ -1071,7 +1071,7 @@ window.addEventListener('beforeinstallprompt', (event) => {
 });
 
 window.addEventListener('appinstalled', () => {
-  toast('تم تثبيت Zetora كـ PWA', 'check');
+  toast('تم تثبيت Moon Code كـ PWA', 'check');
   deferredPrompt = null;
 });
 
@@ -1125,7 +1125,7 @@ async function loadSkills(section) {
     for (const skill of all) {
       const card = document.createElement('div');
       card.className = 'skill-card';
-      const tag = skill.builtin ? '<span style="font:9px ZetoraMono;color:var(--mint);border:1px solid var(--line);padding:1px 5px;border-radius:4px">BUILTIN</span>' : '';
+      const tag = skill.builtin ? '<span style="font:9px Moon CodeMono;color:var(--mint);border:1px solid var(--line);padding:1px 5px;border-radius:4px">BUILTIN</span>' : '';
       card.innerHTML = `<div><strong></strong> ${tag}</div><small></small><div class="skill-actions"><button class="skill-run">تشغيل</button></div>`;
       $('strong', card).textContent = skill.name || skill.id;
       $('small', card).textContent = skill.description || '';
@@ -1157,7 +1157,7 @@ async function invokeSkill(id) {
 }
 
 async function loadMcp(section) {
-  section.innerHTML = `<div class="setting-heading"><h3>خوادم MCP</h3><p>Model Context Protocol: وصّل أدوات وخوادم خارجية لاستخدامها في الوكيل. التهيئة في <code>.zetora/mcp.json</code>.</p></div><div id="mcp-container"></div>`;
+  section.innerHTML = `<div class="setting-heading"><h3>خوادم MCP</h3><p>Model Context Protocol: وصّل أدوات وخوادم خارجية لاستخدامها في الوكيل. التهيئة في <code>.mooncode/mcp.json</code>.</p></div><div id="mcp-container"></div>`;
   const container = $('#mcp-container', section);
   try {
     const response = await fetch('/api/mcp');

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # ════════════════════════════════════════════════════════════════════════════
-# Zetora installer for macOS and Linux
+# Moon Code installer for macOS and Linux
 # ════════════════════════════════════════════════════════════════════════════
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/qbrahym02-cmyk/zetora/main/scripts/install/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/qbrahym02-cmyk/mooncode/main/scripts/install/install.sh | bash
 #
 # Or, to install a specific version:
-#   curl -fsSL https://raw.githubusercontent.com/qbrahym02-cmyk/zetora/main/scripts/install/install.sh | bash -s -- --version 0.9.1
+#   curl -fsSL https://raw.githubusercontent.com/qbrahym02-cmyk/mooncode/main/scripts/install/install.sh | bash -s -- --version 0.9.1
 #
 # This script:
 #   1. Detects your OS and architecture
@@ -17,8 +17,8 @@
 set -euo pipefail
 
 # ─── Configuration ──────────────────────────────────────────────────────────
-REPO="qbrahym02-cmyk/zetora"
-INSTALL_VERSION="${ZETORA_VERSION:-latest}"
+REPO="qbrahym02-cmyk/mooncode"
+INSTALL_VERSION="${MOONCODE_VERSION:-latest}"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -52,7 +52,7 @@ error() { echo -e "${RED}✗${RESET} $1" >&2; }
 
 # ─── Banner ─────────────────────────────────────────────────────────────────
 echo ""
-echo -e "${VIOLET}▰ ▰${RESET}  ${BOLD}ZETORA${RESET} ${DIM}Installer${RESET}"
+echo -e "${VIOLET}▰ ▰${RESET}  ${BOLD}MOONCODE${RESET} ${DIM}Installer${RESET}"
 echo -e "${DIM}Local-first agentic workspace for code and design${RESET}"
 echo ""
 
@@ -95,14 +95,14 @@ fi
 info "Install directory: ${INSTALL_DIR}"
 
 # ─── Determine asset name ───────────────────────────────────────────────────
-# Asset naming convention: zetora-{version}-{os}-{arch}.tar.gz
-# For desktop: Zetora-{version}-{os}-{arch}.{ext}
+# Asset naming convention: mooncode-{version}-{os}-{arch}.tar.gz
+# For desktop: Moon Code-{version}-{os}-{arch}.{ext}
 # We install the CLI by default; desktop can be downloaded separately.
 
 if [[ "$PLATFORM" == "macos" ]]; then
-  ASSET="zetora-${INSTALL_VERSION}-macos-${ARCH}.tar.gz"
+  ASSET="mooncode-${INSTALL_VERSION}-macos-${ARCH}.tar.gz"
 elif [[ "$PLATFORM" == "linux" ]]; then
-  ASSET="zetora-${INSTALL_VERSION}-linux-${ARCH}.tar.gz"
+  ASSET="mooncode-${INSTALL_VERSION}-linux-${ARCH}.tar.gz"
 fi
 
 DOWNLOAD_URL="https://github.com/${REPO}/releases/download/v${INSTALL_VERSION}/${ASSET}"
@@ -115,10 +115,10 @@ if ! curl -fsSL "$DOWNLOAD_URL" -o "${TMP_DIR}/${ASSET}"; then
   warn "Pre-built binary not found: ${ASSET}"
   info "Falling back to npm installation..."
   if command -v npm &>/dev/null; then
-    npm install -g "zetora@${INSTALL_VERSION}" 2>&1 | tail -5
+    npm install -g "mooncode@${INSTALL_VERSION}" 2>&1 | tail -5
     ok "Installed via npm"
     echo ""
-    ok "Zetora installed! Run: zetora help"
+    ok "Moon Code installed! Run: mooncode help"
     exit 0
   else
     error "npm not found. Please install Node.js 20.12+ and try again."
@@ -133,17 +133,17 @@ ok "Downloaded"
 info "Extracting..."
 tar -xzf "${TMP_DIR}/${ASSET}" -C "$TMP_DIR"
 
-# Find the zetora binary
-BINARY_PATH="$(find "$TMP_DIR" -name 'zetora' -type f | head -1)"
+# Find the mooncode binary
+BINARY_PATH="$(find "$TMP_DIR" -name 'mooncode' -type f | head -1)"
 if [[ -z "$BINARY_PATH" ]]; then
-  error "Could not find zetora binary in the archive."
+  error "Could not find mooncode binary in the archive."
   exit 1
 fi
 
 # ─── Install ────────────────────────────────────────────────────────────────
-info "Installing to ${INSTALL_DIR}/zetora..."
-cp "$BINARY_PATH" "${INSTALL_DIR}/zetora"
-chmod +x "${INSTALL_DIR}/zetora"
+info "Installing to ${INSTALL_DIR}/mooncode..."
+cp "$BINARY_PATH" "${INSTALL_DIR}/mooncode"
+chmod +x "${INSTALL_DIR}/mooncode"
 ok "Installed"
 
 # ─── PATH check ─────────────────────────────────────────────────────────────
@@ -172,14 +172,14 @@ fi
 
 # ─── Verify ─────────────────────────────────────────────────────────────────
 echo ""
-if [[ -x "${INSTALL_DIR}/zetora" ]]; then
-  ok "Zetora v${INSTALL_VERSION} installed successfully!"
+if [[ -x "${INSTALL_DIR}/mooncode" ]]; then
+  ok "Moon Code v${INSTALL_VERSION} installed successfully!"
   echo ""
   echo -e "${DIM}Quick start:${RESET}"
-  echo -e "  ${VIOLET}zetora${RESET}              ${DIM}# start TUI in current directory${RESET}"
-  echo -e "  ${VIOLET}zetora serve${RESET}        ${DIM}# start HTTP server${RESET}"
-  echo -e "  ${VIOLET}zetora open${RESET}         ${DIM}# open in browser${RESET}"
-  echo -e "  ${VIOLET}zetora help${RESET}         ${DIM}# show all commands${RESET}"
+  echo -e "  ${VIOLET}mooncode${RESET}              ${DIM}# start TUI in current directory${RESET}"
+  echo -e "  ${VIOLET}mooncode serve${RESET}        ${DIM}# start HTTP server${RESET}"
+  echo -e "  ${VIOLET}mooncode open${RESET}         ${DIM}# open in browser${RESET}"
+  echo -e "  ${VIOLET}mooncode help${RESET}         ${DIM}# show all commands${RESET}"
   echo ""
   echo -e "${DIM}Docs: https://github.com/${REPO}#readme${RESET}"
   echo ""

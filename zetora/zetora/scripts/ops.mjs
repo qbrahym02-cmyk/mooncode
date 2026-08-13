@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Zetora operations CLI — central entry point for all dev/build/test/release tasks.
+ * Moon Code operations CLI — central entry point for all dev/build/test/release tasks.
  *
  * Usage:
  *   node scripts/ops.mjs <command> [args]
@@ -48,7 +48,7 @@ function capture(cmd, cmdArgs) {
 
 const commands = {
   help() {
-    console.log(`Zetora operations CLI
+    console.log(`Moon Code operations CLI
 
 Usage: node scripts/ops.mjs <command> [args]
 
@@ -88,7 +88,7 @@ Environment:
   },
 
   async tui() {
-    run("node", ["apps/tui/src/cli.js", "--workspace", process.env.ZETORA_WORKSPACE || "./workspace"]);
+    run("node", ["apps/tui/src/cli.js", "--workspace", process.env.MOONCODE_WORKSPACE || "./workspace"]);
   },
 
   async test() {
@@ -114,7 +114,7 @@ Environment:
   async env() {
     const { config } = await import("../packages/config/src/index.js");
     await config.load();
-    console.log("Zetora environment (secrets redacted):\n");
+    console.log("Moon Code environment (secrets redacted):\n");
     console.log(config.toRedactedString());
     console.log("\nLoaded:", config._loaded ? "yes" : "no");
     console.log("Mode:", config.node.env);
@@ -134,8 +134,8 @@ Environment:
   },
 
   async health() {
-    const port = process.env.ZETORA_PORT || 4173;
-    const host = process.env.ZETORA_HOST || "127.0.0.1";
+    const port = process.env.MOONCODE_PORT || 4173;
+    const host = process.env.MOONCODE_HOST || "127.0.0.1";
     try {
       const response = await fetch(`http://${host}:${port}/api/health`);
       if (!response.ok) {
@@ -187,22 +187,22 @@ Environment:
     console.log("[ops] committing release...");
     run("git", ["add", "-A"]);
     run("git", ["commit", "-m", `release: v${version}`]);
-    run("git", ["tag", "-a", `v${version}`, "-m", `Zetora v${version}`]);
+    run("git", ["tag", "-a", `v${version}`, "-m", `Moon Code v${version}`]);
     console.log(`[ops] release v${version} prepared. Push with: node scripts/ops.mjs git:push`);
   },
 
   async "docker:build"() {
-    const tag = args[1] || `zetora:0.9.1`;
+    const tag = args[1] || `mooncode:0.9.1`;
     console.log(`[ops] building Docker image: ${tag}`);
     run("docker", ["build", "-t", tag, "-f", "docker/Dockerfile", "."]);
     console.log(`[ops] image built: ${tag}`);
   },
 
   async "docker:run"() {
-    const tag = args[1] || `zetora:0.9.1`;
+    const tag = args[1] || `mooncode:0.9.1`;
     const port = args[2] || "4173:4173";
     console.log(`[ops] running Docker image: ${tag} on port ${port}`);
-    run("docker", ["run", "--rm", "-p", port, "-v", `${path.join(root, "workspace")}:/app/workspace`, "-v", `${path.join(root, ".zetora")}:/app/.zetora`, tag]);
+    run("docker", ["run", "--rm", "-p", port, "-v", `${path.join(root, "workspace")}:/app/workspace`, "-v", `${path.join(root, ".mooncode")}:/app/.mooncode`, tag]);
   },
 
   async "docker:dev"() {
@@ -213,7 +213,7 @@ Environment:
   async clean() {
     const targets = [
       "node_modules",
-      ".zetora",
+      ".mooncode",
       "dist",
       "build",
       "out",

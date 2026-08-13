@@ -13,7 +13,7 @@ const ansi = {
 const color = (value, tone) => `${ansi[tone] || ""}${value}${ansi.reset}`;
 
 function args(argv) {
-  const output = { provider: process.env.ZETORA_PROVIDER || "demo", model: process.env.ZETORA_MODEL || "demo-local", workspace: process.cwd() };
+  const output = { provider: process.env.MOONCODE_PROVIDER || "demo", model: process.env.MOONCODE_MODEL || "demo-local", workspace: process.cwd() };
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === "--provider") output.provider = argv[++index];
     else if (argv[index] === "--model") output.model = argv[++index];
@@ -25,7 +25,7 @@ function args(argv) {
 
 const options = args(process.argv.slice(2));
 if (options.help) {
-  console.log(`Zetora TUI\n\nUsage: zetora [--workspace PATH] [--provider NAME] [--model NAME]\n\nEnvironment: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY, OPENROUTER_API_KEY`);
+  console.log(`Moon Code TUI\n\nUsage: mooncode [--workspace PATH] [--provider NAME] [--model NAME]\n\nEnvironment: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY, OPENROUTER_API_KEY`);
   process.exit(0);
 }
 
@@ -37,7 +37,7 @@ const runner = new AgentRunner({ workspace, approvalStore: async (approval) => {
 const history = [];
 
 function header() {
-  console.log(`${color("▰ ▰", "violet")}  ${color("ZETORA", "bold")} ${color("TUI", "dim")}`);
+  console.log(`${color("▰ ▰", "violet")}  ${color("MOONCODE", "bold")} ${color("TUI", "dim")}`);
   console.log(color(`workspace  ${workspace.root}`, "dim"));
   console.log(color(`model      ${options.provider} / ${options.model}`, "dim"));
   console.log(color("────────────────────────────────────────────────────────────", "dim"));
@@ -75,7 +75,7 @@ while (true) {
   pendingApproval = null;
   await runner.run({ prompt: inputValue, history: history.slice(0, -1), provider: options.provider, model: options.model }, (event) => {
     if (event.type === "text.delta") {
-      if (!announced) { stdout.write(`\n${color("zetora", "mint")} › `); announced = true; }
+      if (!announced) { stdout.write(`\n${color("mooncode", "mint")} › `); announced = true; }
       stdout.write(event.delta); assistantText += event.delta;
     } else if (event.type === "tool.started") {
       stdout.write(`\n  ${color("↳", "violet")} ${color(event.name, "dim")} ${color(JSON.stringify(event.input), "dim")}\n`);

@@ -1,12 +1,12 @@
 {
-  "name": "@zetora/desktop",
-  "version": "0.9.5",
+  "name": "@mooncode/desktop",
+  "version": "1.0.0",
   "private": true,
-  "description": "Zetora desktop app — local-first agentic workspace",
+  "description": "Moon Code desktop app — local-first agentic workspace",
   "main": "src/main.cjs",
   "scripts": {
     "start": "electron .",
-    "start:dev": "cross-env ZETORA_DESKTOP=1 electron .",
+    "start:dev": "cross-env MOONCODE_DESKTOP=1 electron .",
     "package": "electron-builder",
     "package:all": "electron-builder -mwl",
     "package:mac": "electron-builder --mac",
@@ -20,8 +20,8 @@
     "cross-env": "^7.0.3"
   },
   "build": {
-    "appId": "studio.zetora.app",
-    "productName": "Zetora",
+    "appId": "studio.mooncode.app",
+    "productName": "Moon Code",
     "copyright": "Copyright © 2026 Brahim",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "directories": {
@@ -70,7 +70,7 @@
         { "target": "portable", "arch": ["x64"] }
       ],
       "icon": "build/icon.ico",
-      "publisherName": "Zetora",
+      "publisherName": "Moon Code",
       "verifyUpdateCodeSignature": false
     },
     "nsis": {
@@ -82,7 +82,7 @@
       "installerHeaderIcon": "build/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Zetora"
+      "shortcutName": "Moon Code"
     },
     "portable": {
       "artifactName": "${productName}-${version}-portable.exe"
@@ -96,9 +96,9 @@
       "category": "Development",
       "icon": "build/icon.png",
       "maintainer": "Brahim <qbrahym02-cmyk@users.noreply.github.com>",
-      "vendor": "Zetora",
+      "vendor": "Moon Code",
       "synopsis": "Local-first agentic workspace for code and design",
-      "description": "Zetora is a local-first agentic workspace for code and design. It runs an agent that can read, write, and execute on your local files with explicit approval for every consequential action."
+      "description": "Moon Code is a local-first agentic workspace for code and design. It runs an agent that can read, write, and execute on your local files with explicit approval for every consequential action."
     },
     "AppImage": {
       "artifactName": "${productName}-${version}-${arch}.AppImage"
@@ -109,7 +109,7 @@
     "publish": {
       "provider": "github",
       "owner": "qbrahym02-cmyk",
-      "repo": "zetora",
+      "repo": "mooncode",
       "releaseType": "release"
     }
   }

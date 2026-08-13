@@ -10,7 +10,7 @@ const MAX_FILES = 8;
  * at every model call. Typical usage: project conventions, coding standards,
  * design system reference, build instructions.
  *
- * The set is stored as `.zetora/context.json` listing relative paths and an
+ * The set is stored as `.mooncode/context.json` listing relative paths and an
  * optional description. The actual files live in the workspace so they can
  * be edited with normal tools.
  */

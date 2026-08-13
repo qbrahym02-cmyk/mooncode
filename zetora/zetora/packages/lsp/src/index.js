@@ -24,7 +24,7 @@ export class LspDiagnostics {
       catch (error) {
         // v0.9.1: ENOENT is expected (binary not installed); log others.
         if (error?.code !== "ENOENT") {
-          console.warn(`[zetora] lsp stat(${candidate}) failed: ${error.message}`);
+          console.warn(`[mooncode] lsp stat(${candidate}) failed: ${error.message}`);
         }
       }
     }
@@ -45,7 +45,7 @@ export class LspDiagnostics {
     try { await stat(pkgJsonPath); }
     catch {
       await writeFile(pkgJsonPath, JSON.stringify({
-        name: "zetora-workspace",
+        name: "mooncode-workspace",
         version: "1.0.0",
         private: true,
         type: "module",
@@ -116,7 +116,7 @@ export class LspDiagnostics {
     } catch (error) {
       // v0.9.1: ESLint output was not valid JSON. Log instead of silently
       // returning empty. This usually means ESLint crashed or config is broken.
-      console.warn(`[zetora] lsp: failed to parse ESLint output: ${error.message}`);
+      console.warn(`[mooncode] lsp: failed to parse ESLint output: ${error.message}`);
       return [];
     }
   }

@@ -1,5 +1,5 @@
 /**
- * Shared helpers for the Zetora HTTP server.
+ * Shared helpers for the Moon Code HTTP server.
  *
  * v0.9.1 refactor: extracted from server.js to reduce its size and improve
  * readability. These helpers are pure (or close to pure) functions that
@@ -144,7 +144,7 @@ export async function recordMessage(sessionId, role, content, stateStore) {
     }
     session.messages = [...(session.messages ?? []), { role, content, at: new Date().toISOString() }].slice(-100);
     session.updatedAt = new Date().toISOString();
-    if (role === "user" && (!session.title || session.title === "البدء مع Zetora")) {
+    if (role === "user" && (!session.title || session.title === "البدء مع Moon Code")) {
       const preview = typeof content === "string"
         ? content
         : (Array.isArray(content) ? content.find((p) => p.type === "text")?.text ?? "Image session" : "Session");

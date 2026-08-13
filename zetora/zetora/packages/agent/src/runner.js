@@ -2,7 +2,7 @@ import { createEvent, EventType, Risk, toolRisk } from "../../kernel/src/index.j
 import { callModel, estimateCost } from "../../providers/src/index.js";
 import { TOOL_DEFINITIONS } from "../../tools/src/catalog.js";
 
-const SYSTEM_PROMPT = `You are Zetora, a careful code and design agent working inside one local project.
+const SYSTEM_PROMPT = `You are Moon Code, a careful code and design agent working inside one local project.
 
 Operating rules:
 - Inspect before changing. Never claim you read or changed something unless a tool result confirms it.
@@ -132,7 +132,7 @@ export class AgentRunner {
   }
 
   /**
-   * Execute a tool call. Native Zetora tools run inline; MCP tools are routed
+   * Execute a tool call. Native Moon Code tools run inline; MCP tools are routed
    * through the registry by their namespaced name.
    */
   async #executeAnyTool(call, approved) {
@@ -197,7 +197,7 @@ export class AgentRunner {
         if (!approved) return { approvalRequired: true, risk: Risk.MODIFY };
         const previous = await this.#snapshotFile(input.path);
         const result = await this.workspace.write(input.path, input.content);
-        await this.#checkpoint(`zetora: write ${input.path}`);
+        await this.#checkpoint(`mooncode: write ${input.path}`);
         return { ...result, diff: { previous, next: String(input.content) } };
       }
       case "replace_text": {
@@ -205,14 +205,14 @@ export class AgentRunner {
         const previous = await this.#snapshotFile(input.path);
         const result = await this.workspace.replace(input.path, input.oldText, input.newText);
         const next = (await this.workspace.read(input.path).catch(() => ({ content: "" }))).content;
-        await this.#checkpoint(`zetora: replace ${input.path}`);
+        await this.#checkpoint(`mooncode: replace ${input.path}`);
         return { ...result, diff: { previous, next, replacedFrom: String(input.oldText), replacedTo: String(input.newText) } };
       }
       case "auto_fix": {
         if (!approved) return { approvalRequired: true, risk: Risk.MODIFY };
         if (!this.autoFix) throw new Error("Auto-fix is not enabled");
         const result = await this.autoFix.fix(input.path, { fixers: input.fixers, dryRun: input.dryRun, verify: input.verify });
-        if (result.fixed !== false && !input.dryRun) await this.#checkpoint(`zetora: auto_fix ${input.path}`);
+        if (result.fixed !== false && !input.dryRun) await this.#checkpoint(`mooncode: auto_fix ${input.path}`);
         return result;
       }
       case "spawn_subagent": {
@@ -266,7 +266,7 @@ export class AgentRunner {
       // v0.9.1: log instead of silently swallowing. ENOENT is expected (new file),
       // but other errors (permissions, disk) should be visible.
       if (error?.code !== "ENOENT") {
-        this.env.console?.warn?.(`[zetora] snapshotFile(${relative}) failed: ${error.message}`);
+        this.env.console?.warn?.(`[mooncode] snapshotFile(${relative}) failed: ${error.message}`);
       }
       return null;
     }
@@ -278,13 +278,13 @@ export class AgentRunner {
       return await this.git.checkpoint(message);
     } catch (error) {
       // Checkpoint failures must never abort the mutation itself.
-      this.env.console?.error?.("[zetora] checkpoint failed:", error.message);
+      this.env.console?.error?.("[mooncode] checkpoint failed:", error.message);
       return null;
     }
   }
 
   /**
-   * Undo the most recent Zetora checkpoint and refresh the workspace state.
+   * Undo the most recent Moon Code checkpoint and refresh the workspace state.
    * Returns the result of `git.undo()`. Safe to call when no checkpoint exists.
    */
   async undoLastCheckpoint() {

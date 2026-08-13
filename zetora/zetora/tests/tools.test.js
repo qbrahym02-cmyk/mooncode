@@ -7,7 +7,7 @@ import { Workspace } from "../packages/tools/src/index.js";
 import { AutoFix, FIXERS, diagnoseError } from "../packages/autofix/src/index.js";
 
 test("grep returns matches with context lines", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-grep-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-grep-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = new Workspace(root);
   await workspace.ensure();
@@ -21,7 +21,7 @@ test("grep returns matches with context lines", async (t) => {
 });
 
 test("grep filters by glob pattern", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-glob-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-glob-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = new Workspace(root);
   await workspace.ensure();
@@ -33,14 +33,14 @@ test("grep filters by glob pattern", async (t) => {
 });
 
 test("fetchUrl rejects non-http URLs", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-fetch-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-fetch-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = new Workspace(root);
   await assert.rejects(() => workspace.fetchUrl("file:///etc/passwd"), /http/);
 });
 
 test("parseAST extracts functions, classes, imports, exports", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-ast-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-ast-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = new Workspace(root);
   await workspace.ensure();
@@ -55,7 +55,7 @@ test("parseAST extracts functions, classes, imports, exports", async (t) => {
 });
 
 test("v0.9.1: parseAST handles TypeScript generics, arrow-without-parens, re-exports, methods", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-ast-ts-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-ast-ts-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = new Workspace(root);
   await workspace.ensure();
@@ -99,7 +99,7 @@ test("v0.9.1: parseAST handles TypeScript generics, arrow-without-parens, re-exp
 });
 
 test("runTests detects node --test fallback", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-tests-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-tests-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = new Workspace(root);
   await workspace.ensure();
@@ -111,7 +111,7 @@ test("runTests detects node --test fallback", async (t) => {
 });
 
 test("AutoFix adds trailing newline", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-autofix-nl-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-autofix-nl-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const fixer = new AutoFix(root);
   const file = path.join(root, "a.js");
@@ -125,7 +125,7 @@ test("AutoFix adds trailing newline", async (t) => {
 });
 
 test("AutoFix converts tabs to spaces", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-autofix-tabs-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-autofix-tabs-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const fixer = new AutoFix(root);
   const file = path.join(root, "a.js");
@@ -139,7 +139,7 @@ test("AutoFix converts tabs to spaces", async (t) => {
 });
 
 test("AutoFix pretty-prints JSON", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-autofix-json-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-autofix-json-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const fixer = new AutoFix(root);
   const file = path.join(root, "data.json");
@@ -153,7 +153,7 @@ test("AutoFix pretty-prints JSON", async (t) => {
 });
 
 test("AutoFix dryRun reports without applying", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-autofix-dry-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-autofix-dry-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const fixer = new AutoFix(root);
   const file = path.join(root, "a.js");
@@ -168,7 +168,7 @@ test("AutoFix dryRun reports without applying", async (t) => {
 });
 
 test("AutoFix verifies valid JS after fix", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-autofix-verify-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-autofix-verify-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const fixer = new AutoFix(root);
   const file = path.join(root, "good.js");
@@ -206,7 +206,7 @@ test("FIXERS.trailing-newline is idempotent", () => {
 });
 
 test("read_file with startLine/endLine returns a slice", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-readline-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-readline-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = new Workspace(root);
   await workspace.ensure();

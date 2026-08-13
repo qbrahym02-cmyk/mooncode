@@ -1,4 +1,4 @@
-# Zetora architecture
+# Moon Code architecture
 
 ## Product shape
 

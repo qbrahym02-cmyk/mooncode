@@ -6,14 +6,14 @@ import path from "node:path";
 import { DesignTokens } from "../packages/design/src/index.js";
 
 test("design tokens read returns null when no file exists", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-design-empty-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-design-empty-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const tokens = new DesignTokens(root);
   assert.equal(await tokens.read(), null);
 });
 
 test("design tokens write then read round-trips", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-design-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-design-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const tokens = new DesignTokens(root);
   const payload = {

@@ -1,5 +1,5 @@
 /**
- * Zetora provider adapters — unified entry point.
+ * Moon Code provider adapters — unified entry point.
  *
  * v0.9.1 refactor: the monolithic 551-line index.js has been split into
  * focused files per provider. This file now serves as the public API
@@ -30,7 +30,7 @@ import { demo } from "./demo.js";
 export { ProviderError, estimateCost };
 
 /**
- * Provider preset table. Each entry maps a Zetora provider id to its
+ * Provider preset table. Each entry maps a Moon Code provider id to its
  * configuration: label, default model, env var holding the API key,
  * base URL, and `kind` (which adapter to route to).
  *
@@ -42,7 +42,7 @@ export { ProviderError, estimateCost };
  *   - "ollama"    → ollama.js
  */
 const PROVIDERS = Object.freeze({
-  demo: { label: "Zetora Demo", defaultModel: "demo-local", env: null, kind: "demo" },
+  demo: { label: "Moon Code Demo", defaultModel: "demo-local", env: null, kind: "demo" },
   openai: { label: "OpenAI", defaultModel: "gpt-5-mini", env: "OPENAI_API_KEY", baseUrl: "https://api.openai.com/v1", kind: "openai" },
   anthropic: { label: "Anthropic", defaultModel: "claude-sonnet-4-5", env: "ANTHROPIC_API_KEY", baseUrl: "https://api.anthropic.com/v1", kind: "anthropic" },
   google: { label: "Google", defaultModel: "gemini-2.5-flash", env: "GOOGLE_API_KEY", baseUrl: "https://generativelanguage.googleapis.com/v1beta", kind: "google" },

@@ -12,7 +12,7 @@ const MAX_MANIFEST_BYTES = 64_000;
  *     "name": "My Plugin",
  *     "version": "1.0.0",
  *     "description": "...",
- *     "author": "zetora-team",       // authorId in the trust registry
+ *     "author": "mooncode-team",       // authorId in the trust registry
  *     "capabilities": ["tools", "ui"],
  *     "entry": "./index.js",
  *     "permissions": { "tools": [...], "network": false, "fs": [...] },
@@ -22,7 +22,7 @@ const MAX_MANIFEST_BYTES = 64_000;
  * SECURITY CHANGE in v0.9:
  * - The old v0.6-0.8 `verified` field was a self-computed SHA-256 hash that
  *   anyone could forge. It was misleadingly named "verified".
- * - v0.9 replaces it with proper ED25519 signing via @zetora/security.
+ * - v0.9 replaces it with proper ED25519 signing via @mooncode/security.
  * - The `signedByAuthor` field is true only when the signature is valid
  *   against a trusted author's public key.
  * - The old `selfSignedHash` field is kept for backward compat but clearly
@@ -31,7 +31,7 @@ const MAX_MANIFEST_BYTES = 64_000;
 export class PluginRegistry {
   constructor(dataRoot, signer = null, trustRegistry = null) {
     this.pluginsDir = path.join(path.resolve(dataRoot), "plugins");
-    this.signer = signer;       // PluginSigner from @zetora/security
+    this.signer = signer;       // PluginSigner from @mooncode/security
     this.trustRegistry = trustRegistry; // TrustRegistry
   }
 
@@ -110,7 +110,7 @@ export class PluginRegistry {
       authorTrusted: trustInfo.authorTrusted,
       verified: trustInfo.verified,
       selfSignedHash: signatureType === "sha256-legacy" ? signature.replace("sha256-legacy:", "") : undefined,
-      warning: trustInfo.verified ? null : "Plugin is NOT cryptographically verified. Only the Zetora team's private key can produce a valid signature.",
+      warning: trustInfo.verified ? null : "Plugin is NOT cryptographically verified. Only the Moon Code team's private key can produce a valid signature.",
     };
   }
 

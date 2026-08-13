@@ -2,14 +2,14 @@
 
 ## الإبلاغ عن ثغرة
 
-نأخذ الأمان في Zetora بجدية. إذا اكتشفت ثغرة أمنية، يرجى الإبلاغ عنها بمسؤولية.
+نأخذ الأمان في Moon Code بجدية. إذا اكتشفت ثغرة أمنية، يرجى الإبلاغ عنها بمسؤولية.
 
 ### ⚠️ للثغرات الحرجة
 
 **لا تفتح Issue عام على GitHub.** بدلًا من ذلك:
 
-1. أرسل بريدًا إلكترونيًا إلى: `security@zetora.dev` (سيُضاف قريبًا)
-2. أو استخدم [GitHub Security Advisories](https://github.com/qbrahym02-cmyk/zetora/security/advisories/new)
+1. أرسل بريدًا إلكترونيًا إلى: `security@mooncode.dev` (سيُضاف قريبًا)
+2. أو استخدم [GitHub Security Advisories](https://github.com/qbrahym02-cmyk/mooncode/security/advisories/new)
 3. أو استخدم ميزة "Report a vulnerability" في GitHub
 
 سنرد خلال **48 ساعة** وننشر إصلاحًا خلال **90 يومًا** كحد أقصى (حسب الخطورة).
@@ -22,7 +22,7 @@
 
 ### مُغطّى
 
-- ثغرات في خادم Zetora (`apps/server/`)
+- ثغرات في خادم Moon Code (`apps/server/`)
 - ثغرات في حزم النواة (`packages/`)
 - ثغرات في واجهة الويب (`apps/web/`)
 - ثغرات في عميل MCP
@@ -114,17 +114,17 @@ NDJSON غير قابل للتعديل مع rotation تلقائي (10MB لكل م
 
 قبل النشر للإنتاج، تحقق من:
 
-- [ ] `ZETORA_HOST=127.0.0.1` (لا تربط على `0.0.0.0` إلا للنشر العام)
-- [ ] `ZETORA_SESSION_SECRET` مضبوط (وليس عشوائيًا)
+- [ ] `MOONCODE_HOST=127.0.0.1` (لا تربط على `0.0.0.0` إلا للنشر العام)
+- [ ] `MOONCODE_SESSION_SECRET` مضبوط (وليس عشوائيًا)
 - [ ] `NODE_ENV=production`
-- [ ] `ZETORA_LOG_LEVEL=info` (وليس `debug`)
+- [ ] `MOONCODE_LOG_LEVEL=info` (وليس `debug`)
 - [ ] مفاتيح API في `.env` (وليس في الكود)
 - [ ] `.env` في `.gitignore`
 - [ ] HTTPS مفعّل (عبر reverse proxy)
 - [ ] جدار ناري يقيّد المنفذ
 - [ ] نسخ احتياطي يومي
 - [ ] مراقبة `/api/health`
-- [ ] تدقيق دوري لـ`.zetora/audit.ndjson`
+- [ ] تدقيق دوري لـ`.mooncode/audit.ndjson`
 
 ## إصدارات مدعومة
 
@@ -137,7 +137,7 @@ NDJSON غير قابل للتعديل مع rotation تلقائي (10MB لكل م
 
 ## المساهمون بالأمان
 
-شكرًا لمن ساهم في تحسين أمان Zetora:
+شكرًا لمن ساهم في تحسين أمان Moon Code:
 
 - (لا أحد حتى الآن — كن أولًا!)
 

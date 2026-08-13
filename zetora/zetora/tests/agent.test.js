@@ -26,7 +26,7 @@ function fakeApprovalStore() {
 }
 
 test("demo agent streams text deltas in order", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-stream-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-stream-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const events = [];
   const runner = new AgentRunner({ workspace: new Workspace(root), approvalStore: fakeApprovalStore() });
@@ -41,7 +41,7 @@ test("demo agent streams text deltas in order", async (t) => {
 });
 
 test("runner pauses on write_file and resumes after approval", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-resume-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-resume-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = new Workspace(root);
   await workspace.ensure();
@@ -77,7 +77,7 @@ test("runner pauses on write_file and resumes after approval", async (t) => {
 });
 
 test("write_file returns a diff snapshot for the inspector", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-diff-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-diff-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = new Workspace(root);
   await workspace.ensure();

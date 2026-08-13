@@ -32,7 +32,7 @@ assignees: 'qbrahym02-cmyk'
 
 ## البيئة
 
-- **إصدار Zetora**: 
+- **إصدار Moon Code**: 
 - **إصدار Node.js**: 
 - **نظام التشغيل**: 
 

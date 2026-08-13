@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdir, writeFile, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
-const ZETORA_SIGNATURE = "zetora-checkpoint";
+const MOONCODE_SIGNATURE = "mooncode-checkpoint";
 const MAX_DIFF_BYTES = 250_000;
 const MAX_LOG_ENTRIES = 200;
 
@@ -20,10 +20,10 @@ export class Git {
     this.env = {
       ...process.env,
       GIT_TERMINAL_PROMPT: "0",
-      GIT_AUTHOR_NAME: "Zetora Agent",
-      GIT_AUTHOR_EMAIL: "agent@zetora.local",
-      GIT_COMMITTER_NAME: "Zetora Agent",
-      GIT_COMMITTER_EMAIL: "agent@zetora.local",
+      GIT_AUTHOR_NAME: "Moon Code Agent",
+      GIT_AUTHOR_EMAIL: "agent@mooncode.local",
+      GIT_COMMITTER_NAME: "Moon Code Agent",
+      GIT_COMMITTER_EMAIL: "agent@mooncode.local",
     };
   }
 
@@ -65,7 +65,7 @@ export class Git {
     } catch (error) {
       // v0.9.1: ENOENT is expected (no repo yet), but other errors should be visible.
       if (error?.code !== "ENOENT") {
-        console.warn(`[zetora] git #exists() failed: ${error.message}`);
+        console.warn(`[mooncode] git #exists() failed: ${error.message}`);
       }
       return false;
     }
@@ -74,14 +74,14 @@ export class Git {
   async init() {
     if (await this.#exists()) return { initialized: false, reason: "already_initialized" };
     await this.#run(["init", "--quiet", "--initial-branch=main"]);
-    await this.#run(["config", "user.name", "Zetora Agent"]);
-    await this.#run(["config", "user.email", "agent@zetora.local"]);
+    await this.#run(["config", "user.name", "Moon Code Agent"]);
+    await this.#run(["config", "user.email", "agent@mooncode.local"]);
     // Stage an empty initial commit so later checkpoints have a base to diff against.
-    const gitkeep = path.join(this.root, ".zetora-keep");
-    await writeFile(gitkeep, "# Zetora workspace marker\n", "utf8");
-    await this.#run(["add", ".zetora-keep"]);
+    const gitkeep = path.join(this.root, ".mooncode-keep");
+    await writeFile(gitkeep, "# Moon Code workspace marker\n", "utf8");
+    await this.#run(["add", ".mooncode-keep"]);
     try {
-      await this.#run(["commit", "--quiet", "-m", "zetora: initialize workspace", "--allow-empty"]);
+      await this.#run(["commit", "--quiet", "-m", "mooncode: initialize workspace", "--allow-empty"]);
     } catch (error) {
       if (!error.stderr?.includes("nothing to commit")) throw error;
     }
@@ -134,7 +134,7 @@ export class Git {
    * nothing staged or modified, returns the existing HEAD without creating a
    * new commit. Always returns the resulting HEAD sha.
    */
-  async checkpoint(message = "zetora: checkpoint before mutation") {
+  async checkpoint(message = "mooncode: checkpoint before mutation") {
     if (!(await this.#exists())) await this.init();
     // Stage all tracked changes (and new files inside the workspace).
     await this.#run(["add", "-A"]);
@@ -143,7 +143,7 @@ export class Git {
       const head = await this.#run(["rev-parse", "HEAD"]);
       return { sha: head.stdout.trim(), created: false, reason: "no_changes" };
     }
-    await this.#run(["commit", "--quiet", "-m", `${message} [${ZETORA_SIGNATURE}]`]);
+    await this.#run(["commit", "--quiet", "-m", `${message} [${MOONCODE_SIGNATURE}]`]);
     const head = await this.#run(["rev-parse", "HEAD"]);
     return { sha: head.stdout.trim(), created: true };
   }
@@ -153,25 +153,25 @@ export class Git {
    * - Default mode is `soft` — keeps the changes staged so nothing is lost.
    * - `hard: true` requires `confirm: true` and prints a warning about
    *   irreversible loss. This prevents the dangerous "I lost my work" scenario.
-   * - Before any reset, a backup branch `zetora-undo-backup` is created so the
-   *   user can recover via `git checkout zetora-undo-backup`.
+   * - Before any reset, a backup branch `mooncode-undo-backup` is created so the
+   *   user can recover via `git checkout mooncode-undo-backup`.
    */
   async undo(options = {}) {
     if (!(await this.#exists())) throw new Error("Git repository is not initialized");
     const log = await this.log({ limit: 2 });
     if (!log.commits.length) throw new Error("No checkpoint to undo");
     const last = log.commits[0];
-    if (!last.message.includes(ZETORA_SIGNATURE)) {
-      return { undone: false, reason: "not_a_zetora_checkpoint", sha: last.sha };
+    if (!last.message.includes(MOONCODE_SIGNATURE)) {
+      return { undone: false, reason: "not_a_mooncode_checkpoint", sha: last.sha };
     }
     // Safety: create a backup branch pointing at the current HEAD so the user
     // can always recover the undion if they change their mind.
-    const backupName = `zetora-undo-backup-${Date.now()}`;
+    const backupName = `mooncode-undo-backup-${Date.now()}`;
     try {
       await this.#run(["branch", backupName]);
     } catch (error) {
       // Backup creation failure is non-fatal but we log it.
-      console.error("[zetora] undo backup failed:", error.message);
+      console.error("[mooncode] undo backup failed:", error.message);
     }
     if (log.commits.length < 2) {
       // Only one commit — soft reset keeps the changes staged.
@@ -244,7 +244,7 @@ export class Git {
     } catch (error) {
       // "does not exist" is expected (file not in that revision); re-throw others.
       if (error.stderr?.includes("does not exist") || error.stderr?.includes("exists on disk, but not in")) return null;
-      console.warn(`[zetora] git readFileAtRef(${ref}, ${filePath}) failed: ${error.message}`);
+      console.warn(`[mooncode] git readFileAtRef(${ref}, ${filePath}) failed: ${error.message}`);
       throw error;
     }
   }
@@ -277,7 +277,7 @@ export class Git {
 
   async addWorktree(name, options = {}) {
     if (!(await this.#exists())) await this.init();
-    const target = path.resolve(this.root, "..", `.zetora-worktrees`, name);
+    const target = path.resolve(this.root, "..", `.mooncode-worktrees`, name);
     await mkdir(path.dirname(target), { recursive: true });
     const args = ["worktree", "add", "-b", name, target];
     if (options.base) args.splice(-1, 0, options.base);
@@ -287,7 +287,7 @@ export class Git {
 
   async removeWorktree(name) {
     if (!(await this.#exists())) throw new Error("Git repository is not initialized");
-    const target = path.resolve(this.root, "..", `.zetora-worktrees`, name);
+    const target = path.resolve(this.root, "..", `.mooncode-worktrees`, name);
     await this.#run(["worktree", "remove", "--force", target]);
     return { removed: name };
   }

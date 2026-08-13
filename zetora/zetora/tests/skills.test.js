@@ -6,7 +6,7 @@ import path from "node:path";
 import { SkillRegistry, BUILTIN_SKILLS } from "../packages/skills/src/index.js";
 
 test("skill registry lists empty when no skills directory exists", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-skills-empty-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-skills-empty-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const registry = new SkillRegistry(root);
   const skills = await registry.list();
@@ -14,7 +14,7 @@ test("skill registry lists empty when no skills directory exists", async (t) => 
 });
 
 test("skill registry lists manifests from workspace/skills/", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-skills-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-skills-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const registry = new SkillRegistry(root);
   await registry.create("design-landing", {
@@ -31,7 +31,7 @@ test("skill registry lists manifests from workspace/skills/", async (t) => {
 });
 
 test("create skill writes a manifest file", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-skills-create-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-skills-create-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const registry = new SkillRegistry(root);
   const skill = await registry.create("my-skill", {
@@ -47,7 +47,7 @@ test("create skill writes a manifest file", async (t) => {
 });
 
 test("create skill rejects duplicate id", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-skills-dup-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-skills-dup-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const registry = new SkillRegistry(root);
   await registry.create("dup", { prompt: "first" });
@@ -61,7 +61,7 @@ test("create skill rejects invalid id", async () => {
 });
 
 test("create skill rejects invalid manifest", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-skills-invalid-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-skills-invalid-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const registry = new SkillRegistry(root);
   await assert.rejects(() => registry.create("ok-id", { name: "x" }), /prompt/);
@@ -69,7 +69,7 @@ test("create skill rejects invalid manifest", async (t) => {
 });
 
 test("update skill overwrites manifest", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-skills-update-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-skills-update-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const registry = new SkillRegistry(root);
   await registry.create("upd", { prompt: "v1" });
@@ -85,7 +85,7 @@ test("update rejects builtin skill", async () => {
 });
 
 test("delete skill removes directory", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-skills-delete-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-skills-delete-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const registry = new SkillRegistry(root);
   await registry.create("del", { prompt: "x" });
@@ -102,8 +102,8 @@ test("delete rejects builtin skill", async () => {
 
 test("renderPrompt substitutes {{name}} and {{inputs.name}}", () => {
   const registry = new SkillRegistry("/tmp");
-  const prompt = registry.renderPrompt({ prompt: "Hello {{name}}, {{inputs.name}}!" }, { name: "Zetora" });
-  assert.equal(prompt, "Hello Zetora, Zetora!");
+  const prompt = registry.renderPrompt({ prompt: "Hello {{name}}, {{inputs.name}}!" }, { name: "Moon Code" });
+  assert.equal(prompt, "Hello Moon Code, Moon Code!");
 });
 
 test("renderPrompt uses default fallback {{name|fallback}}", () => {
@@ -128,7 +128,7 @@ test("recordInvocation stores history entries", () => {
 });
 
 test("resolveComposition chains dependent skills", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-skills-compose-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-skills-compose-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const registry = new SkillRegistry(root);
   await registry.create("parent", { prompt: "parent step", compose: ["child-a", "child-b"] });
@@ -142,7 +142,7 @@ test("resolveComposition chains dependent skills", async (t) => {
 });
 
 test("resolveComposition prevents cycles", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-skills-cycle-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-skills-cycle-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const registry = new SkillRegistry(root);
   await registry.create("a", { prompt: "a", compose: ["b"] });
@@ -163,7 +163,7 @@ test("builtin skills include auto-fix and explain-code", () => {
 });
 
 test("listAll merges builtins with user skills", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-skills-listall-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-skills-listall-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const registry = new SkillRegistry(root);
   await registry.create("custom", { prompt: "x" });

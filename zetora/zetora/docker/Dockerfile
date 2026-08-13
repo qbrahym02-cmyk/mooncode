@@ -1,8 +1,8 @@
 # ════════════════════════════════════════════════════════════════════════════
-# Zetora Dockerfile — multi-stage build for minimal production image
+# Moon Code Dockerfile — multi-stage build for minimal production image
 # ════════════════════════════════════════════════════════════════════════════
-# Build:  docker build -t zetora:0.9.1 -f docker/Dockerfile .
-# Run:    docker run -p 4173:4173 -v $(pwd)/workspace:/app/workspace zetora:0.9.1
+# Build:  docker build -t mooncode:1.0.0 -f docker/Dockerfile .
+# Run:    docker run -p 4173:4173 -v $(pwd)/workspace:/app/workspace mooncode:1.0.0
 # ════════════════════════════════════════════════════════════════════════════
 
 # ─── Stage 1: Base ──────────────────────────────────────────────────────────
@@ -24,15 +24,15 @@ COPY docs/ ./docs/
 COPY .env.example ./
 
 # Create directories for runtime data (will be mounted as volumes in prod).
-RUN mkdir -p /app/workspace /app/.zetora
+RUN mkdir -p /app/workspace /app/.mooncode
 
 # Environment defaults (overridable at runtime).
 ENV NODE_ENV=production \
-    ZETORA_HOST=0.0.0.0 \
-    ZETORA_ALLOW_REMOTE=1 \
-    ZETORA_PORT=4173 \
-    ZETORA_WORKSPACE=/app/workspace \
-    ZETORA_DATA=/app/.zetora
+    MOONCODE_HOST=0.0.0.0 \
+    MOONCODE_ALLOW_REMOTE=1 \
+    MOONCODE_PORT=4173 \
+    MOONCODE_WORKSPACE=/app/workspace \
+    MOONCODE_DATA=/app/.mooncode
 
 # Expose the HTTP port.
 EXPOSE 4173
@@ -42,9 +42,9 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1:4173/api/health || exit 1
 
 # Run as a non-root user for defense in depth.
-RUN addgroup -S zetora && adduser -S zetora -G zetora \
-  && chown -R zetora:zetora /app
-USER zetora
+RUN addgroup -S mooncode && adduser -S mooncode -G mooncode \
+  && chown -R mooncode:mooncode /app
+USER mooncode
 
 # Start the server.
 CMD ["node", "apps/server/src/server.js"]
@@ -61,11 +61,11 @@ COPY packages/ ./packages/
 COPY tests/ ./tests/
 COPY docs/ ./docs/
 
-RUN mkdir -p /app/workspace /app/.zetora
+RUN mkdir -p /app/workspace /app/.mooncode
 
 ENV NODE_ENV=development \
-    ZETORA_HOST=0.0.0.0 \
-    ZETORA_PORT=4173
+    MOONCODE_HOST=0.0.0.0 \
+    MOONCODE_PORT=4173
 
 EXPOSE 4173
 

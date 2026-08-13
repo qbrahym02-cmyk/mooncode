@@ -1,4 +1,4 @@
-# Zetora product specification v0.1
+# Moon Code product specification v0.1
 
 ## Promise
 

@@ -23,19 +23,19 @@ import { readFile } from "node:fs/promises";
 /** @type {Record<string, FieldSpec>} */
 const SCHEMA = {
   // --- Server ---
-  ZETORA_PORT:          { type: "number", default: 4173, min: 1, max: 65535 },
-  ZETORA_HOST:          { type: "string", default: "127.0.0.1" },
-  ZETORA_ALLOW_REMOTE:  { type: "boolean", default: false },
-  ZETORA_WORKSPACE:     { type: "string", default: "./workspace" },
-  ZETORA_DATA:          { type: "string", default: "./.zetora" },
-  ZETORA_LOG_LEVEL:     { type: "string", default: "info", enum: ["debug", "info", "warn", "error"] },
+  MOONCODE_PORT:          { type: "number", default: 4173, min: 1, max: 65535 },
+  MOONCODE_HOST:          { type: "string", default: "127.0.0.1" },
+  MOONCODE_ALLOW_REMOTE:  { type: "boolean", default: false },
+  MOONCODE_WORKSPACE:     { type: "string", default: "./workspace" },
+  MOONCODE_DATA:          { type: "string", default: "./.mooncode" },
+  MOONCODE_LOG_LEVEL:     { type: "string", default: "info", enum: ["debug", "info", "warn", "error"] },
 
   // --- Security ---
-  ZETORA_RATE_LIMIT_MAX:    { type: "number", default: 200, min: 1 },
-  ZETORA_RATE_LIMIT_WINDOW: { type: "number", default: 60_000, min: 1000 },
-  ZETORA_AUDIT_MAX_BYTES:   { type: "number", default: 10_485_760, min: 1024 },
-  ZETORA_AUDIT_MAX_FILES:   { type: "number", default: 5, min: 1, max: 100 },
-  ZETORA_SESSION_SECRET:    { type: "string", secret: true, required: false },
+  MOONCODE_RATE_LIMIT_MAX:    { type: "number", default: 200, min: 1 },
+  MOONCODE_RATE_LIMIT_WINDOW: { type: "number", default: 60_000, min: 1000 },
+  MOONCODE_AUDIT_MAX_BYTES:   { type: "number", default: 10_485_760, min: 1024 },
+  MOONCODE_AUDIT_MAX_FILES:   { type: "number", default: 5, min: 1, max: 100 },
+  MOONCODE_SESSION_SECRET:    { type: "string", secret: true, required: false },
 
   // --- Provider API keys (all secret) ---
   OPENAI_API_KEY:      { type: "string", secret: true },
@@ -46,11 +46,11 @@ const SCHEMA = {
   CUSTOM_BASE_URL:     { type: "url" },
 
   // --- Provider defaults ---
-  ZETORA_PROVIDER:     { type: "string", default: "demo" },
-  ZETORA_MODEL:        { type: "string" },
+  MOONCODE_PROVIDER:     { type: "string", default: "demo" },
+  MOONCODE_MODEL:        { type: "string" },
 
   // --- Desktop / Electron ---
-  ZETORA_DESKTOP:      { type: "boolean", default: false },
+  MOONCODE_DESKTOP:      { type: "boolean", default: false },
 
   // --- Node environment ---
   NODE_ENV:            { type: "string", default: "development", enum: ["development", "production", "test"] },
@@ -173,16 +173,16 @@ class Config {
    * Assign a parsed value to the correct namespace in the config object.
    */
   #assign(key, value) {
-    if (key === "ZETORA_PORT" || key === "ZETORA_HOST" || key === "ZETORA_ALLOW_REMOTE" || key === "ZETORA_WORKSPACE" || key === "ZETORA_DATA" || key === "ZETORA_LOG_LEVEL") {
-      const prop = key.replace("ZETORA_", "").toLowerCase();
+    if (key === "MOONCODE_PORT" || key === "MOONCODE_HOST" || key === "MOONCODE_ALLOW_REMOTE" || key === "MOONCODE_WORKSPACE" || key === "MOONCODE_DATA" || key === "MOONCODE_LOG_LEVEL") {
+      const prop = key.replace("MOONCODE_", "").toLowerCase();
       this.server[prop] = value;
-    } else if (key.startsWith("ZETORA_RATE_LIMIT") || key.startsWith("ZETORA_AUDIT") || key === "ZETORA_SESSION_SECRET") {
-      const prop = key.replace("ZETORA_", "").toLowerCase();
+    } else if (key.startsWith("MOONCODE_RATE_LIMIT") || key.startsWith("MOONCODE_AUDIT") || key === "MOONCODE_SESSION_SECRET") {
+      const prop = key.replace("MOONCODE_", "").toLowerCase();
       this.security[prop] = value;
-    } else if (key.startsWith("OPENAI_") || key.startsWith("ANTHROPIC_") || key.startsWith("GOOGLE_") || key.startsWith("OPENROUTER_") || key.startsWith("CUSTOM_") || key === "ZETORA_PROVIDER" || key === "ZETORA_MODEL") {
-      const prop = key.replace(/^(OPENAI|ANTHROPIC|GOOGLE|OPENROUTER|CUSTOM|ZETORA)_/, "").toLowerCase();
+    } else if (key.startsWith("OPENAI_") || key.startsWith("ANTHROPIC_") || key.startsWith("GOOGLE_") || key.startsWith("OPENROUTER_") || key.startsWith("CUSTOM_") || key === "MOONCODE_PROVIDER" || key === "MOONCODE_MODEL") {
+      const prop = key.replace(/^(OPENAI|ANTHROPIC|GOOGLE|OPENROUTER|CUSTOM|MOONCODE)_/, "").toLowerCase();
       this.providers[prop] = value;
-    } else if (key === "ZETORA_DESKTOP") {
+    } else if (key === "MOONCODE_DESKTOP") {
       this.desktop.enabled = value;
     } else if (key === "NODE_ENV") {
       this.node.env = value;

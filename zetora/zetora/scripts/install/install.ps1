@@ -1,11 +1,11 @@
 # ════════════════════════════════════════════════════════════════════════════
-# Zetora installer for Windows (PowerShell)
+# Moon Code installer for Windows (PowerShell)
 # ════════════════════════════════════════════════════════════════════════════
 # Usage:
-#   iwr -useb https://raw.githubusercontent.com/qbrahym02-cmyk/zetora/main/scripts/install/install.ps1 | iex
+#   iwr -useb https://raw.githubusercontent.com/qbrahym02-cmyk/mooncode/main/scripts/install/install.ps1 | iex
 #
 # Or, to install a specific version:
-#   $v="0.9.1"; iwr -useb https://raw.githubusercontent.com/qbrahym02-cmyk/zetora/main/scripts/install/install.ps1 | iex
+#   $v="0.9.1"; iwr -useb https://raw.githubusercontent.com/qbrahym02-cmyk/mooncode/main/scripts/install/install.ps1 | iex
 # ════════════════════════════════════════════════════════════════════════════
 param(
     [string]$Version = "latest"
@@ -13,11 +13,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$Repo = "qbrahym02-cmyk/zetora"
+$Repo = "qbrahym02-cmyk/mooncode"
 
 # ─── Banner ─────────────────────────────────────────────────────────────────
 Write-Host ""
-Write-Host "▰ ▰  ZETORA Installer" -ForegroundColor Magenta
+Write-Host "▰ ▰  MOONCODE Installer" -ForegroundColor Magenta
 Write-Host "Local-first agentic workspace for code and design" -ForegroundColor DarkGray
 Write-Host ""
 
@@ -44,18 +44,18 @@ if ($Version -eq "latest") {
 Ok "Installing version: $Version"
 
 # ─── Determine install directory ────────────────────────────────────────────
-$InstallDir = "$env:LOCALAPPDATA\Programs\zetora"
+$InstallDir = "$env:LOCALAPPDATA\Programs\mooncode"
 if (-not (Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 }
 Info "Install directory: $InstallDir"
 
 # ─── Determine asset name ───────────────────────────────────────────────────
-$Asset = "zetora-$Version-windows-$Arch.zip"
+$Asset = "mooncode-$Version-windows-$Arch.zip"
 $DownloadUrl = "https://github.com/$Repo/releases/download/v$Version/$Asset"
 
 Info "Downloading: $Asset"
-$TmpDir = New-Item -ItemType Directory -Path ([System.IO.Path]::GetTempPath() + "zetora-install-$(Get-Random)") -Force
+$TmpDir = New-Item -ItemType Directory -Path ([System.IO.Path]::GetTempPath() + "mooncode-install-$(Get-Random)") -Force
 $ZipPath = "$($TmpDir.FullName)\$Asset"
 
 try {
@@ -64,10 +64,10 @@ try {
     Warn "Pre-built binary not found: $Asset"
     Info "Falling back to npm installation..."
     if (Get-Command npm -ErrorAction SilentlyContinue) {
-        npm install -g "zetora@$Version"
+        npm install -g "mooncode@$Version"
         Ok "Installed via npm"
         Write-Host ""
-        Ok "Zetora installed! Run: zetora help"
+        Ok "Moon Code installed! Run: mooncode help"
         exit 0
     } else {
         Error "npm not found. Please install Node.js 20.12+ from https://nodejs.org/"
@@ -79,15 +79,15 @@ Ok "Downloaded"
 Info "Extracting..."
 Expand-Archive -Path $ZipPath -DestinationPath $TmpDir.FullName -Force
 
-# Find the zetora executable
-$Binary = Get-ChildItem -Path $TmpDir.FullName -Recurse -Filter "zetora*" | Where-Object { $_.Extension -eq ".exe" -or $_.Extension -eq ".cmd" -or $_.Name -eq "zetora" } | Select-Object -First 1
+# Find the mooncode executable
+$Binary = Get-ChildItem -Path $TmpDir.FullName -Recurse -Filter "mooncode*" | Where-Object { $_.Extension -eq ".exe" -or $_.Extension -eq ".cmd" -or $_.Name -eq "mooncode" } | Select-Object -First 1
 if (-not $Binary) {
-    Error "Could not find zetora executable in the archive."
+    Error "Could not find mooncode executable in the archive."
 }
 
 # ─── Install ────────────────────────────────────────────────────────────────
 Info "Installing to $InstallDir..."
-Copy-Item $Binary.FullName "$InstallDir\zetora" -Force
+Copy-Item $Binary.FullName "$InstallDir\mooncode" -Force
 Ok "Installed"
 
 # ─── Add to PATH ────────────────────────────────────────────────────────────
@@ -102,13 +102,13 @@ if ($UserPath -notlike "*$InstallDir*") {
 
 # ─── Verify ─────────────────────────────────────────────────────────────────
 Write-Host ""
-Ok "Zetora v$Version installed successfully!"
+Ok "Moon Code v$Version installed successfully!"
 Write-Host ""
 Write-Host "Quick start:" -ForegroundColor DarkGray
-Write-Host "  zetora              # start TUI in current directory" -ForegroundColor Gray
-Write-Host "  zetora serve        # start HTTP server" -ForegroundColor Gray
-Write-Host "  zetora open         # open in browser" -ForegroundColor Gray
-Write-Host "  zetora help         # show all commands" -ForegroundColor Gray
+Write-Host "  mooncode              # start TUI in current directory" -ForegroundColor Gray
+Write-Host "  mooncode serve        # start HTTP server" -ForegroundColor Gray
+Write-Host "  mooncode open         # open in browser" -ForegroundColor Gray
+Write-Host "  mooncode help         # show all commands" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Docs: https://github.com/$Repo#readme" -ForegroundColor DarkGray
 Write-Host ""

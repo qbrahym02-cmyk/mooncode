@@ -10,7 +10,7 @@ const MAX_TOKENS_BYTES = 64_000;
  * context when generating artifacts, and the renderer wraps it as a styled
  * reference sheet for the inspector.
  *
- * The schema is intentionally Zetora-specific. It does not import or copy
+ * The schema is intentionally Moon Code-specific. It does not import or copy
  * any token system from the reference projects.
  */
 export class DesignTokens {

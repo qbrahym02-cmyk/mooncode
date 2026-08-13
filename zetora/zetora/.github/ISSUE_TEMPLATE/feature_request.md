@@ -1,6 +1,6 @@
 ---
 name: 💡 طلب ميزة
-about: اقترح ميزة جديدة لـZetora
+about: اقترح ميزة جديدة لـMoon Code
 title: "[FEATURE] "
 labels: enhancement, needs-triage
 assignees: ''

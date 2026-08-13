@@ -1,6 +1,6 @@
-# Zetora Operations Runbook
+# Moon Code Operations Runbook
 
-> دليل العمليات اليومية لإدارة Zetora في بيئات التطوير والإنتاج.
+> دليل العمليات اليومية لإدارة Moon Code في بيئات التطوير والإنتاج.
 
 ## جدول المحتويات
 
@@ -51,17 +51,17 @@ npm run dev
 
 ### ملف `.env`
 
-كل تكوين Zetora يتم عبر متغيرات البيئة. الملف `.env.example` يوثّق كل خيار.
+كل تكوين Moon Code يتم عبر متغيرات البيئة. الملف `.env.example` يوثّق كل خيار.
 
 | المتغير | الافتراضي | الوصف |
 |---|---|---|
-| `ZETORA_PORT` | 4173 | منفذ HTTP |
-| `ZETORA_HOST` | 127.0.0.1 | عنوان الربط |
-| `ZETORA_ALLOW_REMOTE` | 0 | السماح بالربط على 0.0.0.0 |
-| `ZETORA_WORKSPACE` | ./workspace | مسار مساحة العمل |
-| `ZETORA_DATA` | ./.zetora | مسار بيانات التشغيل |
-| `ZETORA_LOG_LEVEL` | info | debug/info/warn/error |
-| `ZETORA_SESSION_SECRET` | (عشوائي) | سر توقيع الجلسات |
+| `MOONCODE_PORT` | 4173 | منفذ HTTP |
+| `MOONCODE_HOST` | 127.0.0.1 | عنوان الربط |
+| `MOONCODE_ALLOW_REMOTE` | 0 | السماح بالربط على 0.0.0.0 |
+| `MOONCODE_WORKSPACE` | ./workspace | مسار مساحة العمل |
+| `MOONCODE_DATA` | ./.mooncode | مسار بيانات التشغيل |
+| `MOONCODE_LOG_LEVEL` | info | debug/info/warn/error |
+| `MOONCODE_SESSION_SECRET` | (عشوائي) | سر توقيع الجلسات |
 | `OPENAI_API_KEY` | (فارغ) | مفتاح OpenAI |
 | `ANTHROPIC_API_KEY` | (فارغ) | مفتاح Anthropic |
 | `GOOGLE_API_KEY` | (فارغ) | مفتاح Google |
@@ -82,7 +82,7 @@ npm run env:validate
 ```bash
 openssl rand -hex 32
 # انسخ الناتج إلى .env:
-# ZETORA_SESSION_SECRET=<الناتج>
+# MOONCODE_SESSION_SECRET=<الناتج>
 ```
 
 ---
@@ -132,10 +132,10 @@ node scripts/ops.mjs dev
 
 ```bash
 # 1. ابنِ الصورة
-node scripts/ops.mjs docker:build zetora:0.9.1
+node scripts/ops.mjs docker:build mooncode:0.9.1
 
 # 2. شغّلها
-node scripts/ops.mjs docker:run zetora:0.9.1 4173:4173
+node scripts/ops.mjs docker:run mooncode:0.9.1 4173:4173
 
 # أو عبر docker-compose
 docker compose -f docker/docker-compose.yml up prod -d
@@ -145,12 +145,12 @@ docker compose -f docker/docker-compose.yml up prod -d
 
 ```bash
 # 1. انسخ الكود إلى الخادم
-git clone <repo-url> /opt/zetora
-cd /opt/zetora
+git clone <repo-url> /opt/mooncode
+cd /opt/mooncode
 
 # 2. اضبط البيئة
 cp .env.example .env
-# عدّل .env: ZETORA_HOST, ZETORA_SESSION_SECRET, مفاتيح API
+# عدّل .env: MOONCODE_HOST, MOONCODE_SESSION_SECRET, مفاتيح API
 NODE_ENV=production
 
 # 3. تحقق
@@ -163,18 +163,18 @@ NODE_ENV=production npm start
 
 ### النشر بإستخدام systemd
 
-أنشئ `/etc/systemd/system/zetora.service`:
+أنشئ `/etc/systemd/system/mooncode.service`:
 
 ```ini
 [Unit]
-Description=Zetora agentic workspace
+Description=Moon Code agentic workspace
 After=network.target
 
 [Service]
 Type=simple
-User=zetora
-WorkingDirectory=/opt/zetora
-EnvironmentFile=/opt/zetora/.env
+User=mooncode
+WorkingDirectory=/opt/mooncode
+EnvironmentFile=/opt/mooncode/.env
 ExecStart=/usr/bin/node apps/server/src/server.js
 Restart=always
 RestartSec=5
@@ -187,9 +187,9 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable zetora
-sudo systemctl start zetora
-sudo systemctl status zetora
+sudo systemctl enable mooncode
+sudo systemctl start mooncode
+sudo systemctl status mooncode
 ```
 
 ### خادم عكسي (Nginx)
@@ -197,7 +197,7 @@ sudo systemctl status zetora
 ```nginx
 server {
     listen 80;
-    server_name zetora.example.com;
+    server_name mooncode.example.com;
 
     location / {
         proxy_pass http://127.0.0.1:4173;
@@ -230,10 +230,10 @@ curl http://127.0.0.1:4173/api/health
 ```json
 {
   "ok": true,
-  "service": "zetora",
+  "service": "mooncode",
   "version": "0.9.1",
   "uptime": 3600,
-  "workspace": "/opt/zetora/workspace",
+  "workspace": "/opt/mooncode/workspace",
   "memory": {
     "rssMb": 85,
     "heapUsedMb": 42,
@@ -263,9 +263,9 @@ node scripts/ops.mjs health
 watch -n 30 'curl -s http://127.0.0.1:4173/api/health | jq'
 
 # راقب السجلات
-journalctl -u zetora -f           # systemd
+journalctl -u mooncode -f           # systemd
 docker compose logs -f prod       # Docker
-tail -f .zetora/audit.ndjson      # سجل التدقيق
+tail -f .mooncode/audit.ndjson      # سجل التدقيق
 ```
 
 ### مؤشرات صحية
@@ -330,7 +330,7 @@ npm run env:validate
 lsof -i :4173
 
 # شغّل في وضع debug
-ZETORA_LOG_LEVEL=debug npm run dev
+MOONCODE_LOG_LEVEL=debug npm run dev
 ```
 
 ### الـagent لا يستجيب
@@ -338,7 +338,7 @@ ZETORA_LOG_LEVEL=debug npm run dev
 1. تحقق من `health` → `approvalsPending` قد يكون عاليًا.
 2. تحقق من مفاتيح API: `npm run env` (يجب أن تظهر `[SET]`).
 3. جرّب مزوّدًا مختلفًا من الإعدادات.
-4. راجع سجل التدقيق: `tail -f .zetora/audit.ndjson | jq .`
+4. راجع سجل التدقيق: `tail -f .mooncode/audit.ndjson | jq .`
 
 ### Git checkpoints لا تعمل
 
@@ -359,18 +359,18 @@ watch -n 5 'curl -s http://127.0.0.1:4173/api/health | jq .memory'
 # إذا تجاوز heapUsed 256MB:
 # 1. أعد تشغيل الخادم
 # 2. تحقق من الجلسات الطويلة (compaction قد يكون معطّلًا)
-# 3. راجع .zetora/state.json حجمه
+# 3. راجع .mooncode/state.json حجمه
 ```
 
 ### سجل التدقيق ينمو بلا حدود
 
 ```bash
 # تحقق من الحجم
-ls -lh .zetora/audit.ndjson*
+ls -lh .mooncode/audit.ndjson*
 
 # الـrotation يعمل تلقائيًا عند 10MB
 # لتغيير الحد:
-ZETORA_AUDIT_MAX_BYTES=5242880  # 5MB
+MOONCODE_AUDIT_MAX_BYTES=5242880  # 5MB
 ```
 
 ---
@@ -381,11 +381,11 @@ ZETORA_AUDIT_MAX_BYTES=5242880  # 5MB
 
 | المسار | المحتوى | الأهمية |
 |---|---|---|
-| `.zetora/state.json` | الجلسات، الموافقات، الإعدادات | حرج |
-| `.zetora/audit.ndjson` | سجل التدقيق | حرج |
-| `.zetora/mcp.json` | تكوين خوادم MCP | متوسط |
-| `.zetora/trust-registry.json` | مؤلفون موثوقون | متوسط |
-| `.zetora/plugin-signing.key` | مفتاح التوقيع الخاص | حرج (لا يُرفع للـgit) |
+| `.mooncode/state.json` | الجلسات، الموافقات، الإعدادات | حرج |
+| `.mooncode/audit.ndjson` | سجل التدقيق | حرج |
+| `.mooncode/mcp.json` | تكوين خوادم MCP | متوسط |
+| `.mooncode/trust-registry.json` | مؤلفون موثوقون | متوسط |
+| `.mooncode/plugin-signing.key` | مفتاح التوقيع الخاص | حرج (لا يُرفع للـgit) |
 | `workspace/` | ملفات مشروعك | حرج |
 | `.env` | المفاتيح والأسرار | حرج (لا يُرفع للـgit) |
 
@@ -395,11 +395,11 @@ ZETORA_AUDIT_MAX_BYTES=5242880  # 5MB
 #!/bin/bash
 # scripts/backup.sh
 DATE=$(date +%Y%m%d)
-BACKUP_DIR="/backups/zetora/$DATE"
+BACKUP_DIR="/backups/mooncode/$DATE"
 mkdir -p "$BACKUP_DIR"
 
 # نسخ البيانات الحرجة
-cp -r .zetora "$BACKUP_DIR/"
+cp -r .mooncode "$BACKUP_DIR/"
 cp .env "$BACKUP_DIR/"
 cp -r workspace "$BACKUP_DIR/"
 
@@ -408,29 +408,29 @@ tar -czf "$BACKUP_DIR.tar.gz" "$BACKUP_DIR"
 rm -rf "$BACKUP_DIR"
 
 # احتفظ بآخر 30 يومًا فقط
-find /backups/zetora -name "*.tar.gz" -mtime +30 -delete
+find /backups/mooncode -name "*.tar.gz" -mtime +30 -delete
 ```
 
 أضف إلى crontab:
 ```cron
-0 2 * * * /opt/zetora/scripts/backup.sh
+0 2 * * * /opt/mooncode/scripts/backup.sh
 ```
 
 ### الاستعادة
 
 ```bash
 # 1. أوقف الخادم
-sudo systemctl stop zetora
+sudo systemctl stop mooncode
 
 # 2. استعد
-cd /opt/zetora
-tar -xzf /backups/zetora/20260101.tar.gz -C .
-cp 20260101/.zetora .zetora
+cd /opt/mooncode
+tar -xzf /backups/mooncode/20260101.tar.gz -C .
+cp 20260101/.mooncode .mooncode
 cp 20260101/.env .env
 cp -r 20260101/workspace/* workspace/
 
 # 3. أعد التشغيل
-sudo systemctl start zetora
+sudo systemctl start mooncode
 ```
 
 ---
@@ -439,23 +439,23 @@ sudo systemctl start zetora
 
 ### قائمة فحص أمني للإنتاج
 
-- [ ] `ZETORA_HOST=127.0.0.1` (لا تربط على 0.0.0.0 إلا إذا أردت وصول شبكي)
-- [ ] `ZETORA_SESSION_SECRET` مضبوط (وليس عشوائيًا)
+- [ ] `MOONCODE_HOST=127.0.0.1` (لا تربط على 0.0.0.0 إلا إذا أردت وصول شبكي)
+- [ ] `MOONCODE_SESSION_SECRET` مضبوط (وليس عشوائيًا)
 - [ ] `NODE_ENV=production`
-- [ ] `ZETORA_LOG_LEVEL=info` (وليس debug في الإنتاج)
+- [ ] `MOONCODE_LOG_LEVEL=info` (وليس debug في الإنتاج)
 - [ ] مفاتيح API مضبوطة في `.env` (وليس في الكود)
 - [ ] `.env` في `.gitignore` ولا يُرفع للـgit
 - [ ] HTTPS مفعّل (عبر Nginx/Caddy reverse proxy)
 - [ ] جدار ناري يقيّد المنفذ 4173
 - [ ] نسخ احتياطي يومي للبيانات الحرجة
 - [ ] مراقبة مستمرة لـ`/api/health`
-- [ ] تدقيق دوري لـ`.zetora/audit.ndjson`
+- [ ] تدقيق دوري لـ`.mooncode/audit.ndjson`
 
 ### كشف الأسرار المسرّبة
 
 ```bash
 # ابحث عن أسرار في سجل التدقيق (يجب أن تكون [REDACTED])
-grep -v "REDACTED" .zetora/audit.ndjson | grep -E "sk-|ghp_|AKIA" | head
+grep -v "REDACTED" .mooncode/audit.ndjson | grep -E "sk-|ghp_|AKIA" | head
 
 # ابحث عن أسرار في الكود المرفوع
 git log -p | grep -E "sk-proj-|sk-ant-|ghp_" | head
@@ -477,14 +477,14 @@ git log -p | grep -E "sk-proj-|sk-ant-|ghp_" | head
 # توليد مفاتيح التوقيع (مرة واحدة)
 node -e "
   import('./packages/security/src/index.js').then(async ({ PluginSigner }) => {
-    const signer = new PluginSigner('.zetora');
+    const signer = new PluginSigner('.mooncode');
     await signer.generateKeys();
-    console.log('Keys generated in .zetora/');
+    console.log('Keys generated in .mooncode/');
   });
 "
 
-# المفتاح الخاص (.zetora/plugin-signing.key) يجب أن يبقى سريًا!
-# المفتاح العام (.zetora/plugin-signing.pub) يُوزّع مع التطبيق.
+# المفتاح الخاص (.mooncode/plugin-signing.key) يجب أن يبقى سريًا!
+# المفتاح العام (.mooncode/plugin-signing.pub) يُوزّع مع التطبيق.
 ```
 
 ---

@@ -1,6 +1,6 @@
-// Zetora service worker — minimal offline shell caching.
+// Moon Code service worker — minimal offline shell caching.
 // Caches the app shell for offline use; API requests always go to network.
-const CACHE_NAME = "zetora-v0.6.0";
+const CACHE_NAME = "mooncode-v0.6.0";
 const SHELL_ASSETS = ["/", "/styles.css", "/app.js", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

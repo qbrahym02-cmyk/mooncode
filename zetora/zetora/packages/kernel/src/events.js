@@ -1,5 +1,5 @@
 /**
- * Zetora's internal event vocabulary. The Web, Desktop and TUI clients consume
+ * Moon Code's internal event vocabulary. The Web, Desktop and TUI clients consume
  * the same events, which keeps presentation separate from agent execution.
  */
 export const EventType = Object.freeze({

@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════════════════
-# Zetora docker-compose — local development and production-like deployment
+# Moon Code docker-compose — local development and production-like deployment
 # ════════════════════════════════════════════════════════════════════════════
 #
 # Usage:
@@ -8,7 +8,7 @@
 #
 # Volumes:
 #   workspace/  → your project files (the agent operates here)
-#   .zetora/    → sessions, approvals, audit log, MCP config
+#   .mooncode/    → sessions, approvals, audit log, MCP config
 # ════════════════════════════════════════════════════════════════════════════
 
 services:
@@ -22,13 +22,13 @@ services:
       - "4173:4173"
     volumes:
       - ../workspace:/app/workspace
-      - ../.zetora:/app/.zetora
+      - ../.mooncode:/app/.mooncode
       - ../packages:/app/packages:ro      # hot-reload source changes
       - ../apps:/app/apps:ro
       - ../tests:/app/tests:ro
     environment:
       - NODE_ENV=development
-      - ZETORA_LOG_LEVEL=debug
+      - MOONCODE_LOG_LEVEL=debug
       # Pass through provider keys from host .env
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
@@ -51,11 +51,11 @@ services:
       - "127.0.0.1:4173:4173"   # bind to localhost only; use a reverse proxy for remote
     volumes:
       - ../workspace:/app/workspace
-      - ../.zetora:/app/.zetora
+      - ../.mooncode:/app/.mooncode
     environment:
       - NODE_ENV=production
-      - ZETORA_LOG_LEVEL=info
-      - ZETORA_SESSION_SECRET=${ZETORA_SESSION_SECRET:-}
+      - MOONCODE_LOG_LEVEL=info
+      - MOONCODE_SESSION_SECRET=${MOONCODE_SESSION_SECRET:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
@@ -66,8 +66,8 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-    # Run as the non-root zetora user (set in Dockerfile).
-    user: "zetora:zetora"
+    # Run as the non-root mooncode user (set in Dockerfile).
+    user: "mooncode:mooncode"
 
   # ─── Test Runner (one-shot) ─────────────────────────────────────────────
   test:

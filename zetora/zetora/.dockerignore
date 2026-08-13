@@ -7,8 +7,8 @@
 !.env.example
 
 # Runtime data
-.zetora/
-.zetora-worktrees/
+.mooncode/
+.mooncode-worktrees/
 
 # Git
 .git/

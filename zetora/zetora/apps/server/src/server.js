@@ -36,17 +36,17 @@ import {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../../..");
 const publicDir = path.join(root, "apps/web/public");
-const workspaceRoot = path.resolve(root, process.env.ZETORA_WORKSPACE || "workspace");
-const dataRoot = path.resolve(root, process.env.ZETORA_DATA || ".zetora");
+const workspaceRoot = path.resolve(root, process.env.MOONCODE_WORKSPACE || "workspace");
+const dataRoot = path.resolve(root, process.env.MOONCODE_DATA || ".mooncode");
 const uploadsRoot = path.join(dataRoot, "uploads");
 // SECURITY (v0.9): bind to localhost by default. Binding to 0.0.0.0 exposes
 // the agent's file/write/command tools to anyone on the network. Users who
-// explicitly want remote access must set ZETORA_HOST=0.0.0.0 AND acknowledge
-// the risk via ZETORA_ALLOW_REMOTE=1.
-const requestedHost = process.env.ZETORA_HOST || "127.0.0.1";
-const allowRemote = process.env.ZETORA_ALLOW_REMOTE === "1";
+// explicitly want remote access must set MOONCODE_HOST=0.0.0.0 AND acknowledge
+// the risk via MOONCODE_ALLOW_REMOTE=1.
+const requestedHost = process.env.MOONCODE_HOST || "127.0.0.1";
+const allowRemote = process.env.MOONCODE_ALLOW_REMOTE === "1";
 const host = (requestedHost === "0.0.0.0" && !allowRemote) ? "127.0.0.1" : requestedHost;
-const port = Number(process.env.ZETORA_PORT || 4173);
+const port = Number(process.env.MOONCODE_PORT || 4173);
 const workspace = new Workspace(workspaceRoot);
 const git = new Git(workspaceRoot);
 const ptyRegistry = new PtyRegistry();
@@ -70,9 +70,9 @@ const rateLimiter = new RateLimiter({ windowMs: 60_000, max: 200 });
 pluginRegistry.signer = pluginSigner;
 pluginRegistry.trustRegistry = trustRegistry;
 const stateStore = new JsonStore(path.join(dataRoot, "state.json"), {
-  product: { name: "Zetora", nameArabic: "زيتورا", version: "0.7.0" },
-  projects: [{ id: "zetora-self", name: "Zetora", path: workspaceRoot, kind: "code-design", createdAt: new Date().toISOString() }],
-  sessions: [{ id: "welcome", title: "البدء مع Zetora", updatedAt: new Date().toISOString(), mode: "build", messages: [], events: [], usage: null }],
+  product: { name: "Moon Code", nameArabic: "مون كود", version: "0.7.0" },
+  projects: [{ id: "mooncode-self", name: "Moon Code", path: workspaceRoot, kind: "code-design", createdAt: new Date().toISOString() }],
+  sessions: [{ id: "welcome", title: "البدء مع Moon Code", updatedAt: new Date().toISOString(), mode: "build", messages: [], events: [], usage: null }],
   approvals: [],
   runs: [],
 });
@@ -90,10 +90,10 @@ watcher.on("change", (event) => {
     try { client.write(`data: ${payload}\n\n`); } catch {}
   }
 });
-watcher.start().catch((error) => console.error("[zetora] watcher failed:", error.message));
+watcher.start().catch((error) => console.error("[mooncode] watcher failed:", error.message));
 
 // Best-effort MCP server reconnection on startup. Failures are non-fatal.
-mcpRegistry.connectAll().catch((error) => console.error("[zetora] mcp init:", error.message));
+mcpRegistry.connectAll().catch((error) => console.error("[mooncode] mcp init:", error.message));
 
 // Approvals store API for the runner.
 const approvalStoreApi = {
@@ -151,8 +151,8 @@ async function api(request, response, url) {
     try { gitStatus = await git.status(); } catch { gitStatus = { repository: false }; }
     return json(response, 200, {
       ok: true,
-      service: "zetora",
-      version: "0.9.5",
+      service: "mooncode",
+      version: "1.0.0",
       uptime: Math.round(process.uptime()),
       workspace: workspaceRoot,
       isDemoWorkspace: workspaceRoot === path.resolve(root, "workspace"),
@@ -172,7 +172,7 @@ async function api(request, response, url) {
     });
   }
 
-  // Workspace switch API: lets the user point Zetora at a different directory
+  // Workspace switch API: lets the user point Moon Code at a different directory
   // without restarting the server. Validated against path traversal.
   if (method === "POST" && pathname === "/api/workspace") {
     const input = await body(request);
@@ -204,7 +204,7 @@ async function api(request, response, url) {
     const tokens = await designTokens.read().catch(() => null);
     const ctxManifest = await contextFiles.readManifest().catch(() => ({ files: [] }));
     return json(response, 200, {
-      product: { name: "Zetora", nameArabic: "زيتورا", version: "0.7.0" },
+      product: { name: "Moon Code", nameArabic: "مون كود", version: "0.7.0" },
       project: state.projects?.[0],
       sessions: state.sessions ?? [],
       approvals: (state.approvals ?? []).filter((item) => item.status === "pending"),
@@ -233,10 +233,10 @@ async function api(request, response, url) {
   }
 
   if (method === "PUT" && pathname === "/api/file") {
-    if (request.headers["x-zetora-confirm"] !== "write") return json(response, 428, { error: "Explicit write confirmation header is required" });
+    if (request.headers["x-mooncode-confirm"] !== "write") return json(response, 428, { error: "Explicit write confirmation header is required" });
     const input = await body(request, 5_000_000);
     const result = await workspace.write(input.path, input.content);
-    await git.checkpoint(`zetora: write ${input.path}`).catch(() => {});
+    await git.checkpoint(`mooncode: write ${input.path}`).catch(() => {});
     await auditLog.record({ action: "file.write", path: input.path, bytes: result.bytes });
     return json(response, 200, result);
   }
@@ -294,7 +294,7 @@ async function api(request, response, url) {
     if (action === "init") return json(response, 200, await git.init());
     if (action === "checkpoint") {
       const input = await body(request);
-      return json(response, 200, await git.checkpoint(input.message || "zetora: manual checkpoint"));
+      return json(response, 200, await git.checkpoint(input.message || "mooncode: manual checkpoint"));
     }
     if (action === "undo") {
       const input = await body(request).catch(() => ({}));
@@ -352,11 +352,11 @@ async function api(request, response, url) {
   // Legacy one-shot terminal (still supported for backwards compatibility)
   if (method === "POST" && pathname === "/api/terminal") {
     const input = await body(request);
-    const result = await workspace.run(input.command, { approved: request.headers["x-zetora-confirm"] === "execute", timeout: input.timeout });
+    const result = await workspace.run(input.command, { approved: request.headers["x-mooncode-confirm"] === "execute", timeout: input.timeout });
     return json(response, result.approvalRequired ? 202 : 200, result);
   }
 
-  // Image upload endpoint: stores raw bytes under .zetora/uploads/ and returns
+  // Image upload endpoint: stores raw bytes under .mooncode/uploads/ and returns
   // a data URI suitable for inclusion in the next chat message.
   if (method === "POST" && pathname === "/api/uploads") {
     const chunks = [];
@@ -657,13 +657,13 @@ async function api(request, response, url) {
     // arbitrary install scripts from the network. Route it through the same
     // approval workflow as run_command so the user must explicitly consent.
     const input = await body(request).catch(() => ({}));
-    if (request.headers["x-zetora-confirm"] !== "install") {
+    if (request.headers["x-mooncode-confirm"] !== "install") {
       // Return 202 with approval required — matches the terminal pattern.
       return json(response, 202, {
         approvalRequired: true,
         risk: "execute",
         command: "npm install --save-dev eslint@latest",
-        reason: "Installing npm packages runs arbitrary install scripts from the network. Send { } with header x-zetora-confirm: install to proceed.",
+        reason: "Installing npm packages runs arbitrary install scripts from the network. Send { } with header x-mooncode-confirm: install to proceed.",
         pinnedVersion: null, // ESLint latest — we don't pin, which is why approval matters
       });
     }
@@ -775,8 +775,8 @@ async function api(request, response, url) {
     const filePath = input.path || "";
     // If no provider is configured, return a heuristic suggestion based on
     // common patterns (e.g. close brackets, complete function signatures).
-    const provider = input.provider || process.env.ZETORA_PROVIDER || "demo";
-    const model = input.model || process.env.ZETORA_MODEL || "demo-local";
+    const provider = input.provider || process.env.MOONCODE_PROVIDER || "demo";
+    const model = input.model || process.env.MOONCODE_MODEL || "demo-local";
     if (provider === "demo" || !input.apiKey) {
       const heuristic = computeHeuristicSuggestion(prefix, suffix, language);
       return json(response, 200, { suggestion: heuristic, prefix, suffix, source: "heuristic" });
@@ -821,8 +821,8 @@ async function api(request, response, url) {
   }
   if (method === "POST" && pathname === "/api/trust") {
     const input = await body(request);
-    if (request.headers["x-zetora-confirm"] !== "trust") {
-      return json(response, 202, { approvalRequired: true, reason: "Adding a trusted author is a security-sensitive operation. Send with header x-zetora-confirm: trust." });
+    if (request.headers["x-mooncode-confirm"] !== "trust") {
+      return json(response, 202, { approvalRequired: true, reason: "Adding a trusted author is a security-sensitive operation. Send with header x-mooncode-confirm: trust." });
     }
     await auditLog.record({ action: "trust.add", authorId: input.authorId, name: input.name });
     const author = await trustRegistry.addAuthor(input.authorId, input.publicKey, input.name, input.trustLevel || "trusted");
@@ -840,8 +840,8 @@ async function api(request, response, url) {
 
   // SECURITY (v0.9): Plugin signing key generation — first-run setup.
   if (method === "POST" && pathname === "/api/plugins/generate-keys") {
-    if (request.headers["x-zetora-confirm"] !== "generate-keys") {
-      return json(response, 202, { approvalRequired: true, reason: "Generating signing keys is a security-sensitive operation. Send with header x-zetora-confirm: generate-keys." });
+    if (request.headers["x-mooncode-confirm"] !== "generate-keys") {
+      return json(response, 202, { approvalRequired: true, reason: "Generating signing keys is a security-sensitive operation. Send with header x-mooncode-confirm: generate-keys." });
     }
     await auditLog.record({ action: "plugin.generate-keys" });
     const keys = await pluginSigner.generateKeys();
@@ -940,27 +940,27 @@ const server = http.createServer(async (request, response) => {
   } catch (error) {
     // SECURITY: never leak secrets in error messages.
     const safeError = redactSecrets(error.message || "Internal error").redacted;
-    console.error(`[zetora] ${request.method} ${url.pathname}:`, safeError);
+    console.error(`[mooncode] ${request.method} ${url.pathname}:`, safeError);
     if (!response.headersSent) json(response, error.status || 500, { error: safeError });
     else if (!response.writableEnded) response.end();
   }
 });
 
 server.listen(port, host, () => {
-  console.log(`Zetora is ready at http://${host}:${port}`);
+  console.log(`Moon Code is ready at http://${host}:${port}`);
   console.log(`Workspace: ${workspaceRoot}`);
   // Warn the user if they're using the default demo workspace.
   if (workspaceRoot === path.resolve(root, "workspace")) {
     console.log(`\n⚠  You are using the demo workspace at ${workspaceRoot}`);
     console.log(`   To work on your own project, restart with:`);
-    console.log(`   ZETORA_WORKSPACE=/path/to/your/project npm run dev\n`);
+    console.log(`   MOONCODE_WORKSPACE=/path/to/your/project npm run dev\n`);
   }
   // SECURITY: warn if bound to all interfaces.
   if (host === "0.0.0.0") {
-    console.log(`\n⚠⚠  SECURITY WARNING: Zetora is bound to 0.0.0.0 (all network interfaces).`);
+    console.log(`\n⚠⚠  SECURITY WARNING: Moon Code is bound to 0.0.0.0 (all network interfaces).`);
     console.log(`   Anyone on your network can access the agent's file/write/command tools.`);
     console.log(`   This is intentionally restricted — to enable remote access you set BOTH:`);
-    console.log(`     ZETORA_HOST=0.0.0.0 AND ZETORA_ALLOW_REMOTE=1`);
+    console.log(`     MOONCODE_HOST=0.0.0.0 AND MOONCODE_ALLOW_REMOTE=1`);
     console.log(`   If this was unintentional, restart without these env vars.\n`);
   }
 });
@@ -996,7 +996,7 @@ function broadcastCollab(sessionId, message) {
 }
 
 function shutdown(signal) {
-  console.log(`\n${signal}: closing Zetora`);
+  console.log(`\n${signal}: closing Moon Code`);
   ptyRegistry.closeAll();
   mcpRegistry.closeAll();
   watcher.close();
