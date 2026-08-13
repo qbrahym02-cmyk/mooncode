@@ -28,7 +28,7 @@ import os from "node:os";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const VERSION = "1.0.0";
+const VERSION = "1.1.0";
 const DEFAULT_PORT = 4173;
 
 // ANSI colors for pretty output (disabled on Windows non-TTY).
@@ -56,6 +56,8 @@ ${color("USAGE", "violet")}
 
 ${color("COMMANDS", "violet")}
   ${color("start", "mint")}            ${color("★ ابدأ كل شيء (الخادم + المتصفح)", "bold")}
+  ${color("update", "mint")}           ${color("★ تحديث من أي مكان في العالم", "bold")}
+  ${color("check-update", "mint")}     تحقق من تحديثات جديدة
   ${color("tui", "mint")}              Start the terminal UI
   ${color("serve", "mint")}            Start HTTP server only
   ${color("health", "mint")}           Check server health
@@ -256,6 +258,33 @@ function parseArgs(args) {
   return opts;
 }
 
+// ─── update: check and install updates ──────────────────────────────────────
+async function updateCommand(args) {
+  const force = args.includes("--force") || args.includes("-f");
+  const { checkAndUpdate } = await import("../../../packages/updater/src/index.js");
+  const result = await checkAndUpdate(VERSION, { force });
+  if (result.updated) {
+    console.log(`\n✓ Moon Code updated: ${result.from} → ${result.to}`);
+    console.log("  Restart Moon Code to use the new version.");
+  } else if (result.reason === "already up to date") {
+    // Already printed by checkAndUpdate
+  } else {
+    console.log(`\n✗ No update performed: ${result.reason}`);
+  }
+}
+
+async function checkUpdateCommand() {
+  const { checkForUpdates } = await import("../../../packages/updater/src/index.js");
+  const update = await checkForUpdates(VERSION);
+  if (update) {
+    console.log(`★ Update available: ${VERSION} → ${update.version}`);
+    console.log(`  ${update.release.name || ""}`);
+    console.log(`\n  Run: mooncode update`);
+  } else {
+    console.log(`✓ You're on the latest version (${VERSION})`);
+  }
+}
+
 // ─── start: the main command ────────────────────────────────────────────────
 // Starts the server in the foreground and opens the browser after it's ready.
 async function startServerAndOpen(args) {
@@ -333,6 +362,13 @@ switch (command) {
   case "start":
     // The main command: start server, then open browser.
     startServerAndOpen(commandArgs);
+    break;
+  case "update":
+  case "upgrade":
+    updateCommand(commandArgs);
+    break;
+  case "check-update":
+    checkUpdateCommand();
     break;
   case "tui":
   case "ui":
