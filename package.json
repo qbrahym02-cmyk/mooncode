@@ -1,6 +1,6 @@
 {
   "name": "zetora",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "private": true,
   "description": "Local-first agentic workspace for code and design",
   "type": "module",

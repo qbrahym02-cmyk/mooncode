@@ -152,7 +152,7 @@ async function api(request, response, url) {
     return json(response, 200, {
       ok: true,
       service: "zetora",
-      version: "0.9.4",
+      version: "0.9.5",
       uptime: Math.round(process.uptime()),
       workspace: workspaceRoot,
       isDemoWorkspace: workspaceRoot === path.resolve(root, "workspace"),
