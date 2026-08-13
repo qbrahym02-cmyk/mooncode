@@ -1,5 +1,5 @@
 import http from "node:http";
-import { readFile, stat, writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AgentRunner } from "../../../packages/agent/src/index.js";
@@ -24,6 +24,14 @@ import { PluginSigner, TrustRegistry } from "../../../packages/security/src/inde
 import { AuditLog } from "../../../packages/security/src/audit.js";
 import { RateLimiter, applyRateLimit } from "../../../packages/security/src/rate-limit.js";
 import { redactSecrets } from "../../../packages/security/src/secrets.js";
+// v0.9.1: extracted helpers into lib.js to reduce server.js size.
+import {
+  json, body, serveStatic,
+  persistSessionEvent as persistSessionEventImpl,
+  recordMessage as recordMessageImpl,
+  parseMultipart, guessMimeFromName, guessMimeFromContentType,
+  buildFillInMiddlePrompt, computeHeuristicSuggestion,
+} from "./lib.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../../..");
@@ -124,99 +132,12 @@ const runner = new AgentRunner({
   todoList,
 });
 
-const mime = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".woff2": "font/woff2",
-};
-
-function json(response, status, value, headers = {}) {
-  const body = JSON.stringify(value);
-  response.writeHead(status, { "content-type": "application/json; charset=utf-8", "content-length": Buffer.byteLength(body), "cache-control": "no-store", ...headers });
-  response.end(body);
-}
-
-async function body(request, maxBytes = 5_000_000) {
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of request) {
-    size += chunk.length;
-    if (size > maxBytes) throw Object.assign(new Error("Request body is too large"), { status: 413 });
-    chunks.push(chunk);
-  }
-  if (!chunks.length) return {};
-  try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
-  catch { throw Object.assign(new Error("Body must be valid JSON"), { status: 400 }); }
-}
-
-function publicPath(pathname) {
-  const requested = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
-  const target = path.resolve(publicDir, requested);
-  if (target !== publicDir && !target.startsWith(`${publicDir}${path.sep}`)) return null;
-  return target;
-}
-
-async function serveStatic(request, response, pathname) {
-  let target = publicPath(pathname);
-  if (!target) return false;
-  try {
-    let info = await stat(target);
-    if (info.isDirectory()) target = path.join(target, "index.html");
-    info = await stat(target);
-    const extension = path.extname(target).toLowerCase();
-    const content = await readFile(target);
-    response.writeHead(200, {
-      "content-type": mime[extension] || "application/octet-stream",
-      "content-length": content.length,
-      "cache-control": extension === ".html" ? "no-store" : "public, max-age=3600",
-      "x-content-type-options": "nosniff",
-      "content-security-policy": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'",
-    });
-    response.end(content);
-    return true;
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
-    return false;
-  }
-}
-
+// v0.9.1: wrappers that bind stateStore so call sites in api() don't need to change.
 async function persistSessionEvent(sessionId, event) {
-  await stateStore.update((state) => {
-    let session = (state.sessions ?? []).find((item) => item.id === sessionId);
-    if (!session) {
-      session = { id: sessionId, title: `Session ${sessionId.slice(0, 6)}`, updatedAt: new Date().toISOString(), mode: "build", messages: [], events: [], usage: null };
-      state.sessions.unshift(session);
-    }
-    session.events = [...(session.events ?? []), event].slice(-500);
-    session.updatedAt = new Date().toISOString();
-    if (event.type === "usage" && event.cost) session.usage = event.cost;
-    return state;
-  });
+  return persistSessionEventImpl(sessionId, event, stateStore);
 }
-
 async function recordMessage(sessionId, role, content) {
-  await stateStore.update((state) => {
-    let session = (state.sessions ?? []).find((item) => item.id === sessionId);
-    if (!session) {
-      session = { id: sessionId, title: role === "user" ? String(content).slice(0, 56) : `Session ${sessionId.slice(0, 6)}`, updatedAt: new Date().toISOString(), mode: "build", messages: [], events: [], usage: null };
-      state.sessions.unshift(session);
-    }
-    session.messages = [...(session.messages ?? []), { role, content, at: new Date().toISOString() }].slice(-100);
-    session.updatedAt = new Date().toISOString();
-    if (role === "user" && (!session.title || session.title === "البدء مع Zetora")) {
-      const preview = typeof content === "string" ? content : (Array.isArray(content) ? content.find((p) => p.type === "text")?.text ?? "Image session" : "Session");
-      session.title = String(preview).slice(0, 56) || session.title;
-    }
-    return state;
-  });
+  return recordMessageImpl(sessionId, role, content, stateStore);
 }
 
 async function api(request, response, url) {
@@ -995,8 +916,8 @@ const server = http.createServer(async (request, response) => {
   }
   try {
     if (url.pathname.startsWith("/api/")) return await api(request, response, url);
-    if (await serveStatic(request, response, url.pathname)) return;
-    if (request.method === "GET" && await serveStatic(request, response, "/")) return;
+    if (await serveStatic(request, response, url.pathname, publicDir)) return;
+    if (request.method === "GET" && await serveStatic(request, response, "/", publicDir)) return;
     json(response, 404, { error: "Not found" });
   } catch (error) {
     // SECURITY: never leak secrets in error messages.
@@ -1069,103 +990,6 @@ function shutdown(signal) {
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
-/**
- * Minimal multipart/form-data parser sufficient for image uploads. Extracts
- * the first file part and returns its filename, content-type, and buffer.
- * Returns null when the body cannot be parsed.
- */
-function parseMultipart(buffer, contentType) {
-  const boundaryMatch = contentType.match(/boundary=("?)([^";\s]+)\1/);
-  if (!boundaryMatch) return null;
-  const boundary = Buffer.from(`--${boundaryMatch[2]}`);
-  const parts = [];
-  let start = 0;
-  while (true) {
-    const idx = buffer.indexOf(boundary, start);
-    if (idx < 0) break;
-    if (start > 0) parts.push(buffer.slice(start, idx - 2)); // -2 for trailing CRLF
-    start = idx + boundary.length + 2; // skip boundary + CRLF
-  }
-  for (const part of parts) {
-    if (part.length === 0) continue;
-    // Skip the closing boundary marker.
-    if (part[0] === 0x2d && part[1] === 0x2d) continue; // starts with "--"
-    const headerEnd = part.indexOf("\r\n\r\n");
-    if (headerEnd < 0) continue;
-    const headerText = part.slice(0, headerEnd).toString("utf8");
-    const body = part.slice(headerEnd + 4);
-    // Trailing CRLF before the next boundary.
-    const crlf = Buffer.from("\r\n");
-    const trimmed = body.length >= 2 && body[body.length - 2] === 0x0d && body[body.length - 1] === 0x0a ? body.slice(0, -2) : body;
-    const dispositionMatch = headerText.match(/Content-Disposition:\s*form-data;[^\r\n]*filename="([^"]+)"/i);
-    const typeMatch = headerText.match(/Content-Type:\s*([^\r\n]+)/i);
-    if (dispositionMatch) {
-      return {
-        filename: dispositionMatch[1],
-        contentType: typeMatch ? typeMatch[1].trim() : guessMimeFromName(dispositionMatch[1]),
-        buffer: trimmed,
-      };
-    }
-  }
-  return null;
-}
-
-function guessMimeFromName(name) {
-  const ext = path.extname(name).toLowerCase();
-  const map = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml", ".avif": "image/avif" };
-  return map[ext] || "application/octet-stream";
-}
-
-function guessMimeFromContentType(contentType) {
-  return String(contentType).split(";")[0].trim();
-}
-
-/**
- * Build a fill-in-the-middle prompt for inline code completion. The model is
- * asked to output only the code that should appear between prefix and suffix.
- */
-function buildFillInMiddlePrompt(prefix, suffix, language, filePath) {
-  return `You are a code completion engine. Complete the code between the prefix and suffix.
-Output ONLY the code that should be inserted between them. No markdown, no explanation, no code fences.
-
-File: ${filePath || "untitled"}
-Language: ${language}
-
-=== PREFIX (before cursor) ===
-${prefix}
-
-=== SUFFIX (after cursor) ===
-${suffix}
-
-=== INSERT (output only this, no preamble) ===`;
-}
-
-/**
- * Heuristic suggestion for the demo provider. Closes common patterns:
- * unclosed brackets, incomplete function signatures, console.log snippets.
- */
-function computeHeuristicSuggestion(prefix, suffix, language) {
-  const last = prefix.slice(-50);
-  // Close unclosed brackets.
-  const opens = (last.match(/[(\[{]/g) || []).length;
-  const closes = (last.match(/[)\]}]/g) || []).length;
-  if (opens > closes) {
-    const stack = [];
-    for (const ch of last) {
-      if (ch === "(" || ch === "[" || ch === "{") stack.push(ch);
-      else if (ch === ")" && stack[stack.length - 1] === "(") stack.pop();
-      else if (ch === "]" && stack[stack.length - 1] === "[") stack.pop();
-      else if (ch === "}" && stack[stack.length - 1] === "{") stack.pop();
-    }
-    const closeMap = { "(": ")", "[": "]", "{": "}" };
-    return stack.reverse().map((ch) => closeMap[ch]).join("");
-  }
-  // Suggest function body opener.
-  if (/\bfunction\s+\w+\s*\([^)]*\)\s*\{?\s*$/.test(last) && !last.endsWith("{")) {
-    return "{\n  \n}";
-  }
-  // Suggest console.log for debugging.
-  if (/\bconsole\b\.?$/.test(last)) return ".log()";
-  if (/\breturn\s*$/.test(last)) return " ";
-  return "";
-}
+// v0.9.1: parseMultipart, guessMimeFromName, guessMimeFromContentType,
+// buildFillInMiddlePrompt, computeHeuristicSuggestion were extracted to ./lib.js
+// and are imported at the top of this file. No local definitions remain.

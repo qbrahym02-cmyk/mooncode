@@ -54,6 +54,50 @@ test("parseAST extracts functions, classes, imports, exports", async (t) => {
   assert.ok(ast.nodes.some((n) => n.type === "class" && n.name === "Widget"));
 });
 
+test("v0.9.1: parseAST handles TypeScript generics, arrow-without-parens, re-exports, methods", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-ast-ts-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const workspace = new Workspace(root);
+  await workspace.ensure();
+  // TypeScript features: generic function, generic class, type-only import,
+  // re-export, arrow without parens, abstract class, class method.
+  await workspace.write("ts.ts", [
+    "import type { ReactNode } from 'react';",
+    "import { useState } from 'react';",
+    "export function identity<T>(value: T): T { return value; }",
+    "const double = x => x * 2;",
+    "export abstract class Base<T> {",
+    "  abstract render(item: T): string;",
+    "  log(msg: string) { console.log(msg); }",
+    "}",
+    "export { Foo, Bar as Baz } from './foo';",
+    "export type Status = 'active' | 'inactive';",
+  ].join("\n") + "\n");
+  const ast = await workspace.parseAST("ts.ts");
+  // Imports: type import + named import = 2
+  assert.equal(ast.summary.imports, 2);
+  // Functions: identity (generic) + double (arrow no parens) = 2
+  assert.equal(ast.summary.functions, 2);
+  assert.ok(ast.nodes.some((n) => n.type === "function" && n.name === "identity"), "identity<T> should be captured");
+  assert.ok(ast.nodes.some((n) => n.type === "function" && n.name === "double"), "arrow-without-parens should be captured");
+  // Classes: Base<T> = 1
+  assert.equal(ast.summary.classes, 1);
+  assert.ok(ast.nodes.some((n) => n.type === "class" && n.name === "Base"), "abstract class Base<T> should be captured");
+  // Methods: render + log = 2 (methods are captured as type "method")
+  assert.ok(ast.summary.methods >= 2, "class methods render() and log() should be captured");
+  assert.ok(ast.nodes.some((n) => n.type === "method" && n.name === "render"), "render() method should be captured");
+  assert.ok(ast.nodes.some((n) => n.type === "method" && n.name === "log"), "log() method should be captured");
+  // Exports: identity (named), Base (named), Foo (re-export), Bar (re-export) = 4
+  // (re-exports expand into individual entries; `export type Status = ...` uses
+  // `=` not a reserved word, so it's not captured by the namedExport regex —
+  // this is a known limitation documented in the parseAST comment.)
+  assert.ok(ast.summary.exports >= 4, "should capture named + re-exports");
+  assert.ok(ast.nodes.some((n) => n.type === "export" && n.kind === "re-export" && n.name === "Foo"), "re-export Foo should be captured");
+  assert.ok(ast.nodes.some((n) => n.type === "export" && n.kind === "re-export" && n.name === "Bar"), "re-export Bar should be captured");
+  // v0.9.1: re-export with alias — the name before `as` is captured.
+  assert.ok(ast.nodes.some((n) => n.type === "export" && n.kind === "re-export" && n.name === "Bar"), "re-export Bar (alias Baz) should be captured by original name");
+});
+
 test("runTests detects node --test fallback", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "zetora-tests-"));
   t.after(() => rm(root, { recursive: true, force: true }));

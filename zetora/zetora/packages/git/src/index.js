@@ -62,7 +62,13 @@ export class Git {
     try {
       const info = await stat(path.join(this.root, ".git"));
       return info.isDirectory();
-    } catch { return false; }
+    } catch (error) {
+      // v0.9.1: ENOENT is expected (no repo yet), but other errors should be visible.
+      if (error?.code !== "ENOENT") {
+        console.warn(`[zetora] git #exists() failed: ${error.message}`);
+      }
+      return false;
+    }
   }
 
   async init() {
@@ -236,7 +242,9 @@ export class Git {
       const result = await this.#run(["show", `${ref}:${filePath}`]);
       return result.stdout;
     } catch (error) {
-      if (error.stderr?.includes("does not exist")) return null;
+      // "does not exist" is expected (file not in that revision); re-throw others.
+      if (error.stderr?.includes("does not exist") || error.stderr?.includes("exists on disk, but not in")) return null;
+      console.warn(`[zetora] git readFileAtRef(${ref}, ${filePath}) failed: ${error.message}`);
       throw error;
     }
   }

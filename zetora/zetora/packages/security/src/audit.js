@@ -1,7 +1,9 @@
-import { writeFile, readFile, mkdir, rename } from "node:fs/promises";
+import { writeFile, readFile, mkdir, rename, stat } from "node:fs/promises";
 import path from "node:path";
 
 const MAX_ENTRIES = 10_000;
+const DEFAULT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB per log file before rotation
+const MAX_ROTATED_FILES = 5; // keep up to 5 rotated files (audit.ndjson.1 .. .5)
 
 /**
  * Persistent audit log for security-sensitive operations: file writes,
@@ -9,13 +11,21 @@ const MAX_ENTRIES = 10_000;
  *
  * Every entry is immutable and timestamped. The log is stored as NDJSON at
  * `.zetora/audit.log` so it can be inspected with standard tools (grep, jq).
+ *
+ * v0.9.1: added log rotation. When the log file exceeds `maxBytes` (default
+ * 10MB), it is renamed to `audit.ndjson.1` and a new file is started. Up to
+ * `maxRotatedFiles` rotated copies are kept; older ones are deleted. This
+ * prevents unbounded growth on long-running deployments.
  */
 export class AuditLog {
-  constructor(dataRoot) {
+  constructor(dataRoot, options = {}) {
     this.logPath = path.join(path.resolve(dataRoot), "audit.ndjson");
     this.buffer = [];
     this.flushTimer = null;
     this.maxBuffer = 50; // flush after 50 entries or 2s
+    this.maxBytes = Number(options.maxBytes ?? DEFAULT_MAX_BYTES);
+    this.maxRotatedFiles = Number(options.maxRotatedFiles ?? MAX_ROTATED_FILES);
+    this.lastRotationCheck = 0;
   }
 
   async #ensure() {
@@ -44,6 +54,41 @@ export class AuditLog {
     const lines = entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
     await this.#ensure();
     await writeFile(this.logPath, lines, { flag: "a" });
+    // v0.9.1: check rotation at most once per second to avoid stat() spam.
+    const now = Date.now();
+    if (now - this.lastRotationCheck > 1000) {
+      this.lastRotationCheck = now;
+      await this.#maybeRotate().catch(() => {});
+    }
+  }
+
+  /**
+   * Rotate the log file if it exceeds maxBytes. Renames the current file to
+   * `audit.ndjson.1`, shifts older rotations (`.1` → `.2`, etc.), and deletes
+   * files beyond maxRotatedFiles. Errors are non-fatal — a failed rotation
+   * must never prevent audit logging.
+   */
+  async #maybeRotate() {
+    let info;
+    try { info = await stat(this.logPath); }
+    catch (error) { if (error?.code === "ENOENT") return; throw error; }
+    if (info.size < this.maxBytes) return;
+    // Shift existing rotations: .4 → .5, .3 → .4, ... .1 → .2
+    for (let i = this.maxRotatedFiles - 1; i >= 1; i -= 1) {
+      const from = `${this.logPath}.${i}`;
+      const to = `${this.logPath}.${i + 1}`;
+      try {
+        await rename(from, to);
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+    }
+    // Rotate the current file to .1
+    try {
+      await rename(this.logPath, `${this.logPath}.1`);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
   }
 
   async read(options = {}) {

@@ -1,5 +1,115 @@
 # Changelog
 
+## v0.9.0 — 2026-08-13
+
+### Security (critical)
+- **ED25519 plugin signing** replaces the v0.6-0.8 SHA-256 self-hash that was misleadingly named "verified". Real public-key cryptography via `node:crypto`'s `sign()`/`verify()`. The Zetora team holds the private key; the public key ships with Zetora. Plugins signed by the private key can be verified by anyone. Malicious plugins cannot be "signed" by an attacker without the private key.
+- New `PluginSigner` class in `packages/security/src/index.js` with `generateKeys()`, `sign()`, `verify()`.
+- New `TrustRegistry` tracks trusted author public keys with trust levels (`trusted`/`first-party`).
+- `PluginRegistry` (v0.9) uses honest naming:
+  - `signedByAuthor`: true only when signature is valid AND author is trusted.
+  - `signatureValid`: cryptographic validity of the signature.
+  - `authorTrusted`: author is in the trust registry.
+  - `verified`: forced to `false` for legacy SHA-256 hashes (breaks the misleading pattern).
+  - `signatureType`: `ed25519` | `sha256-legacy` | `none`.
+  - `warning` field clearly states when a plugin is NOT cryptographically verified.
+- Migration: old `verified: true` (SHA-256) becomes `verified: false` with `trustLevel: "legacy_self_hash"`. Authors must re-sign with ED25519 to regain trust.
+
+### Packages promoted to first-class
+- `packages/collab` (added in v0.7): collaborative editing with Lamport timestamps, operation log replay, conflict detection.
+- `packages/lsp` (added in v0.6): ESLint + TypeScript diagnostics in one-shot mode, auto-install ESLint.
+- `packages/plugins` (added in v0.6, hardened in v0.9): plugin manifest registry with signature verification.
+- `packages/search-index` (added in v0.6): trigram-based symbol search with ranking.
+- `packages/todos` (added in v0.6): session-scoped todo list with priorities and progress summary.
+- `packages/security` (added in v0.6, expanded in v0.9): ED25519, trust registry, audit log, rate limiter, secret redaction.
+
+### Tests
+- `tests/v6.test.js`: search-index, todos, plugin registry.
+- `tests/v7.test.js`: plugin signing round-trip, tamper detection, collab sessions.
+- `tests/security.test.js`: ED25519 sign/verify, trust registry, audit log, rate limiter, secret redaction (11 patterns).
+- All 118 tests pass.
+
+### Known gaps (documented for honesty)
+- CHANGELOG was not updated for v0.6-0.8; this entry retroactively documents them.
+- `subagent` forces `provider: "demo"` — should inherit parent's provider. (Fixed in v0.9.1.)
+- `parseAST` is regex-based — fragile for TypeScript generics, decorators, multi-line functions. (Planned: migrate to `acorn`.)
+- `server.js` is 55KB / ~1,800 lines — needs splitting into `routes/`. (Planned for v0.9.1.)
+- `collab` is not a real CRDT — concurrent edits to the same line lose data. (Planned: migrate to Y.js or Automerge.)
+
+## v0.8.0 — 2026-08-13
+
+### Security hardening (interim)
+- Continued refinement of the v0.6 plugin trust model in preparation for v0.9 ED25519.
+- Internal audit of SHA-256 "verified" field — identified as misleading; queued for replacement.
+- No new user-facing features; this was a stabilization release.
+
+### Note
+- This release was not publicly documented at the time. This entry is retroactive.
+
+## v0.7.0 — 2026-08-13
+
+### Collaborative editing (new `packages/collab`)
+- `CollabSession` with operation-based merge using Lamport timestamps (logical clock).
+- Each edit stamped with `max(local, message) + 1` for deterministic ordering across peers.
+- Operation log is replayable: new peers reconstruct the document by replaying from the beginning.
+- Conflict detection: operations from different peers targeting overlapping ranges are flagged.
+- `CollabRegistry` tracks active sessions; `getSnapshot()` returns document, peers, operation count, vector clock, conflict count.
+- **Limitation**: not a full CRDT (Y.js/Automerge). Concurrent edits to the same line use "last operation wins" — data loss is possible. Documented in code comments.
+
+### Git worktrees and commit graph (new in `packages/git`)
+- `listWorktrees()`, `addWorktree(name, { base })`, `removeWorktree(name)` for parallel agent work on separate branches.
+- `graph({ limit })` returns structured commit graph (commits + edges + branches) for visual rendering.
+- `readFileAtRef(ref, filePath)` for diffing current file against its last checkpointed version.
+
+### Tests
+- `tests/v7.test.js`: plugin install + verify + tamper detection, collab session SSE-style broadcast, collab registry join/leave, todo progress edge cases, search index stats.
+- `tests/git2.test.js`: worktrees, graph.
+
+### Note
+- This release was not publicly documented at the time. This entry is retroactive.
+
+## v0.6.0 — 2026-08-13
+
+### Search index (new `packages/search-index`)
+- `SearchIndex` builds a trigram-based inverted index over workspace files.
+- `indexAll(files)` indexes up to 5,000 files; `search(query, { limit })` returns ranked results by trigram overlap.
+- `stats()` returns `{ files, trigrams }` for monitoring.
+- Min 3 chars for trigram match; empty queries return `[]` gracefully.
+- New `search_index` tool in the agent catalog (`Risk.OBSERVE`).
+
+### Session todos (new `packages/todos`)
+- `TodoList` with `add`, `update`, `remove`, `clear`, `list`, `summary`.
+- Priorities: `low` / `normal` / `high`. Statuses: `pending` / `in_progress` / `completed` / `skipped`.
+- `summary()` returns `{ total, completed, pending, inProgress, skipped, progress }` (progress is 0-100 integer).
+- New `todo_update` tool in the agent catalog (`Risk.OBSERVE`).
+
+### LSP diagnostics (new `packages/lsp`)
+- `LspDiagnostics` runs ESLint and `tsc --noEmit` in one-shot mode and parses output into a unified diagnostic format.
+- `status()` reports which linters are available; `install()` attempts `npm install --save-dev eslint`.
+- `diagnose(target)` combines ESLint + TypeScript diagnostics with a clear `installable: true` hint when ESLint is missing.
+- New endpoints: `GET /api/lsp/status`, `POST /api/lsp/diagnose`, `POST /api/lsp/install`.
+
+### Plugin registry (new `packages/plugins`, hardened in v0.9)
+- `PluginRegistry` reads `plugin.json` manifests from `.zetora/plugins/<id>/`.
+- `install()`, `uninstall()`, `list()`, `get()`, `hasCapability()`.
+- Capabilities: `tools`, `ui`, `provider`, `skills`, `artifacts`.
+- **v0.6 limitation** (fixed in v0.9): the `verified` field was a self-computed SHA-256 hash that anyone could forge. It was misleadingly named. v0.9 replaces it with ED25519 signing.
+
+### Security package (new `packages/security`, expanded in v0.9)
+- `AuditLog`: immutable NDJSON audit log at `.zetora/audit.log` with batching (50 entries or 2s).
+- `RateLimiter`: sliding-window counter per identifier (IP or session). HTTP headers: `x-ratelimit-limit`, `x-ratelimit-remaining`, `x-ratelimit-reset`, `retry-after`.
+- `redactSecrets()`: 11 patterns for API keys, tokens, private keys, passwords. Returns `{ redacted, found }`.
+- `detectSecrets()`: returns list of detected secret types without values.
+- `withRedaction()`: middleware wrapper for log writers.
+- New endpoints: `GET /api/audit`, `GET /api/audit/stats`.
+
+### Tests
+- `tests/v6.test.js`: search-index (build, rank, stats, empty query), todos (add/update/remove/summary), plugin registry install/list/uninstall, collab session join/edit/snapshot, collab registry create/list/close.
+- All tests pass.
+
+### Note
+- This release was not publicly documented at the time. This entry is retroactive.
+
 ## v0.5.0 — 2026-08-13
 
 ### New tools

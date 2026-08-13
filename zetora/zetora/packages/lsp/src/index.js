@@ -20,7 +20,13 @@ export class LspDiagnostics {
       path.join(this.root, "node_modules", ".bin", name),
     ];
     for (const candidate of candidates) {
-      try { await stat(candidate); return candidate; } catch {}
+      try { await stat(candidate); return candidate; }
+      catch (error) {
+        // v0.9.1: ENOENT is expected (binary not installed); log others.
+        if (error?.code !== "ENOENT") {
+          console.warn(`[zetora] lsp stat(${candidate}) failed: ${error.message}`);
+        }
+      }
     }
     return null;
   }
@@ -107,7 +113,12 @@ export class LspDiagnostics {
         }
       }
       return diags;
-    } catch { return []; }
+    } catch (error) {
+      // v0.9.1: ESLint output was not valid JSON. Log instead of silently
+      // returning empty. This usually means ESLint crashed or config is broken.
+      console.warn(`[zetora] lsp: failed to parse ESLint output: ${error.message}`);
+      return [];
+    }
   }
 
   /**

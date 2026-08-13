@@ -71,7 +71,7 @@ export class McpClient extends EventEmitter {
     const result = await this.#request("initialize", {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: { roots: { listChanged: false } },
-      clientInfo: { name: "zetora", version: "0.4.0" },
+      clientInfo: { name: "zetora", version: "0.9.0" },
     });
     this.serverInfo = result.serverInfo;
     this.serverCapabilities = result.capabilities;
@@ -162,9 +162,18 @@ export class McpClient extends EventEmitter {
     this.closed = true;
     try {
       await this.#notify("notifications/cancelled", {});
-    } catch {}
-    try { this.child.stdin.end(); } catch {}
-    setTimeout(() => { try { this.child?.kill("SIGKILL"); } catch {} }, SHUTDOWN_GRACE_MS).unref();
+    } catch (error) {
+      // v0.9.1: log instead of silently swallowing. The server may have already
+      // exited, but other errors (broken pipe) are worth seeing.
+      this.emit("log", `close: notify failed: ${error.message}`);
+    }
+    try { this.child.stdin.end(); } catch (error) {
+      this.emit("log", `close: stdin.end failed: ${error.message}`);
+    }
+    setTimeout(() => {
+      try { this.child?.kill("SIGKILL"); }
+      catch (error) { this.emit("log", `close: SIGKILL failed: ${error.message}`); }
+    }, SHUTDOWN_GRACE_MS).unref();
   }
 }
 
@@ -206,7 +215,8 @@ export class McpRegistry extends EventEmitter {
     const { mkdir, writeFile, rename } = await import("node:fs/promises");
     await mkdir(this.dataRoot, { recursive: true });
     const tmp = `${this.configPath}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(tmp, JSON.stringify({ servers }, null, 2), { mode: 0o600 });
+    // v0.9.1: include schemaVersion for future migration support.
+    await writeFile(tmp, JSON.stringify({ schemaVersion: 1, servers }, null, 2), { mode: 0o600 });
     await rename(tmp, this.configPath);
   }
 
@@ -253,17 +263,22 @@ export class McpRegistry extends EventEmitter {
     return client;
   }
 
+  /**
+   * Connect to all configured servers in parallel.
+   * v0.9.1: previously sequential, now uses Promise.allSettled for parallelism.
+   * Independent servers should not block each other on connect.
+   */
   async connectAll() {
     const servers = await this.readConfig();
+    const ids = Object.keys(servers);
+    const settled = await Promise.allSettled(ids.map((id) => this.connect(id)));
     const results = {};
-    for (const id of Object.keys(servers)) {
-      try {
-        await this.connect(id);
-        results[id] = { ok: true };
-      } catch (error) {
-        results[id] = { ok: false, error: error.message };
-      }
-    }
+    settled.forEach((outcome, index) => {
+      const id = ids[index];
+      results[id] = outcome.status === "fulfilled"
+        ? { ok: true }
+        : { ok: false, error: outcome.reason?.message || String(outcome.reason) };
+    });
     return results;
   }
 

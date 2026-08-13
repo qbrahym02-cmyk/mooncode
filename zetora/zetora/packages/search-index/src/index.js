@@ -35,7 +35,14 @@ export class SearchIndex {
       const content = await readFile(absolute, "utf8");
       this.#add(relativePath, content, info.size, info.mtimeMs, ext);
       return { path: relativePath, size: info.size, trigrams: this.files.get(relativePath)?.trigramCount || 0 };
-    } catch { return null; }
+    } catch (error) {
+      // v0.9.1: ENOENT is expected (file deleted between walk and index), but
+      // other errors (permissions, encoding) should be visible in logs.
+      if (error?.code !== "ENOENT") {
+        console.warn(`[zetora] search-index failed to index ${relativePath}: ${error.message}`);
+      }
+      return null;
+    }
   }
 
   async indexAll(fileList) {

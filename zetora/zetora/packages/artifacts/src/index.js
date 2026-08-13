@@ -65,7 +65,11 @@ export async function renderArtifact(filePath, options = {}) {
 
 function prettyJson(text) {
   try { return escapeHtml(JSON.stringify(JSON.parse(text.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "")), null, 2)); }
-  catch { return escapeHtml(text); }
+  catch {
+    // v0.9.1: JSON is invalid — fall back to escaped raw text. This is expected
+    // for partial/truncated JSON files and is not an error worth logging.
+    return escapeHtml(text);
+  }
 }
 
 /**

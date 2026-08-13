@@ -174,9 +174,18 @@ export class PtySession extends EventEmitter {
       this.pending = null;
     }
     if (this.child) {
-      try { this.child.stdin.end("exit\n"); } catch {}
+      try { this.child.stdin.end("exit\n"); } catch (error) {
+        // v0.9.1: log instead of silent swallow. EPIPE is expected (shell already exited).
+        if (error?.code !== "EPIPE") this.emit("error", new Error(`stdin.end failed: ${error.message}`));
+      }
       // Give the shell 200ms to exit gracefully, then force-kill.
-      setTimeout(() => { try { this.child?.kill("SIGKILL"); } catch {} }, 200).unref();
+      setTimeout(() => {
+        try { this.child?.kill("SIGKILL"); }
+        catch (error) {
+          // ESRCH = process already exited; anything else is worth logging.
+          if (error?.code !== "ESRCH") this.emit("error", new Error(`SIGKILL failed: ${error.message}`));
+        }
+      }, 200).unref();
     }
     this.emit("close", { reason });
   }

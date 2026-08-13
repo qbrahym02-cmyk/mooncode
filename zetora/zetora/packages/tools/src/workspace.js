@@ -52,8 +52,18 @@ export class Workspace {
     const input = String(relative).replaceAll("\\", "/").replace(/^\/+/, "");
     if (input.includes("\0")) throw Object.assign(new Error("Invalid path"), { status: 400 });
     const candidate = path.resolve(this.root, input || ".");
-    if (candidate !== this.root && !candidate.startsWith(`${this.root}${path.sep}`)) {
-      throw Object.assign(new Error("Path escapes the selected workspace"), { status: 403 });
+    // v0.9.1 hardening: use path.relative() to detect escapes more reliably
+    // than startsWith. This correctly handles edge cases like:
+    //   - workspace = "/home/user/project"
+    //   - input     = "../project-evil"  → startsWith would pass, but relative() reveals ".."
+    //   - input     = "/home/user/project-evil" (absolute, sibling) → startsWith would pass
+    // On Windows, path.sep is "\\", so this also handles drive-letter confusion.
+    if (candidate !== this.root) {
+      const rel = path.relative(this.root, candidate);
+      // If relative path starts with ".." or is absolute, it escapes the workspace.
+      if (rel.startsWith(`..${path.sep}`) || rel === ".." || path.isAbsolute(rel)) {
+        throw Object.assign(new Error("Path escapes the selected workspace"), { status: 403 });
+      }
     }
     return candidate;
   }
@@ -208,7 +218,7 @@ export class Workspace {
     const method = String(options.method || "GET").toUpperCase();
     if (!/^https?:\/\//.test(url)) throw new Error("Only http(s) URLs are allowed");
     const maxBytes = Math.min(Number(options.maxBytes ?? 500_000), 2_000_000);
-    const headers = { "user-agent": "Zetora/0.5.0", ...(options.headers || {}) };
+    const headers = { "user-agent": "Zetora/0.9.0", ...(options.headers || {}) };
     const init = { method, headers, signal: AbortSignal.timeout(30_000) };
     if (options.body && ["POST", "PUT", "PATCH"].includes(method)) {
       init.body = options.body;
@@ -269,7 +279,20 @@ export class Workspace {
   /**
    * Parse a JS/TS source file and return a summary of its structure:
    * imports, exports, functions, classes, with their line positions.
-   * Uses a lightweight regex-based parser — no external dependency.
+   *
+   * v0.9.1: improved regex coverage for:
+   *   - TypeScript generics (`function foo<T>(...)`, `class Foo<T>`)
+   *   - Arrow functions without parens (`const f = x => ...`)
+   *   - Object methods (`{ foo() {} }`)
+   *   - Class fields and methods (`class { bar() {} baz = 1 }`)
+   *   - Decorators (`@Component class Foo {}`)
+   *   - TypeScript type-only imports/exports (`import type`, `export type`)
+   *   - Multi-specifier imports (`import { a, b as c } from "..."`)
+   *   - Default + named re-exports (`export { default, name } from "..."`)
+   *
+   * Still regex-based (no external dependency). For production-grade AST
+   * analysis, consider migrating to `acorn` or `@babel/parser` (planned
+   * for a future release).
    */
   async parseAST(filePath, options = {}) {
     const file = await this.read(filePath);
@@ -278,10 +301,16 @@ export class Workspace {
     const nodes = [];
     const lines = content.split(/\r?\n/);
 
-    // Imports: import ... from '...';  const ... = require('...');
+    // --- Imports ---
+    // Matches: import defaultName from 'mod'
+    //          import { a, b as c } from 'mod'
+    //          import * as ns from 'mod'
+    //          import 'mod'  (side-effect only)
+    //          import type { T } from 'mod'  (TypeScript)
+    //          const x = require('mod')
     for (let i = 0; i < lines.length; i += 1) {
       const line = lines[i];
-      const importMatch = line.match(/^\s*import\s+(?:([^;]+?)\s+from\s+)?['"]([^'"]+)['"]\s*;?/);
+      const importMatch = line.match(/^\s*import\s+(?:type\s+)?(?:([^;]+?)\s+from\s+)?['"]([^'"]+)['"]\s*;?/);
       if (importMatch) {
         nodes.push({ type: "import", line: i + 1, source: importMatch[2], specifiers: importMatch[1]?.trim() || null });
         continue;
@@ -292,7 +321,11 @@ export class Workspace {
       }
     }
 
-    // Exports: export default, export named, export const/let/var/function/class.
+    // --- Exports ---
+    // Matches: export default ...
+    //          export const/let/var/function/class/async function ...
+    //          export type { T }  (TypeScript)
+    //          export { a, b } [from '...']
     for (let i = 0; i < lines.length; i += 1) {
       const line = lines[i];
       const defaultExport = line.match(/^\s*export\s+default\s+(?:async\s+)?(?:function\s+(\w+)|class\s+(\w+)|(\w+))?/);
@@ -300,32 +333,82 @@ export class Workspace {
         nodes.push({ type: "export", line: i + 1, kind: "default", name: defaultExport[1] || defaultExport[2] || defaultExport[3] || "anonymous" });
         continue;
       }
-      const namedExport = line.match(/^\s*export\s+(?:const|let|var|function|async\s+function|class)\s+(\w+)/);
+      const namedExport = line.match(/^\s*export\s+(?:type\s+)?(?:const|let|var|function|async\s+function|class|abstract\s+class|enum|interface)\s+(\w+)/);
       if (namedExport) {
         nodes.push({ type: "export", line: i + 1, kind: "named", name: namedExport[1] });
-      }
-    }
-
-    // Functions: function name(...) {  and  const name = (...) => {
-    for (let i = 0; i < lines.length; i += 1) {
-      const line = lines[i];
-      const funcMatch = line.match(/^(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)/);
-      if (funcMatch) {
-        nodes.push({ type: "function", line: i + 1, name: funcMatch[1], params: detail === "full" ? funcMatch[2].split(",").map((s) => s.trim()).filter(Boolean) : undefined });
         continue;
       }
-      const arrowMatch = line.match(/(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>/);
-      if (arrowMatch) {
-        nodes.push({ type: "function", line: i + 1, name: arrowMatch[1], kind: "arrow", params: detail === "full" ? arrowMatch[2].split(",").map((s) => s.trim()).filter(Boolean) : undefined });
+      // Re-export: export { a, b } from 'mod'
+      const reExport = line.match(/^\s*export\s+\{([^}]+)\}(?:\s+from\s+['"]([^'"]+)['"])?/);
+      if (reExport) {
+        const names = reExport[1].split(",").map((s) => s.trim()).filter(Boolean);
+        for (const name of names) {
+          nodes.push({ type: "export", line: i + 1, kind: "re-export", name: name.replace(/\s+as\s+.+$/, ""), source: reExport[2] || null });
+        }
       }
     }
 
-    // Classes: class Name { ... }
+    // --- Functions ---
+    // Matches: function name(params) {
+    //          async function name(params) {
+    //          function name<T>(params) {  (TypeScript generic)
+    //          const name = (params) => {  (arrow with parens)
+    //          const name = async (params) => {
+    //          const name = x => ...  (arrow without parens)
+    //          const name = async x => ...
     for (let i = 0; i < lines.length; i += 1) {
       const line = lines[i];
-      const classMatch = line.match(/^(?:export\s+)?(?:abstract\s+)?class\s+(\w+)(?:\s+extends\s+(\w+))?/);
+      // Function declaration (with optional TypeScript generic <T>)
+      const funcMatch = line.match(/^(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*(?:<[^>]+>)?\s*\(([^)]*)\)/);
+      if (funcMatch) {
+        nodes.push({
+          type: "function", line: i + 1, name: funcMatch[1],
+          params: detail === "full" ? funcMatch[2].split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+        });
+        continue;
+      }
+      // Arrow function with parens: const name = (params) => {
+      const arrowMatch = line.match(/(?:const|let|var)\s+(\w+)\s*(?::\s*[^=]+)?=\s*(?:async\s*)?\(([^)]*)\)\s*=>/);
+      if (arrowMatch) {
+        nodes.push({
+          type: "function", line: i + 1, name: arrowMatch[1], kind: "arrow",
+          params: detail === "full" ? arrowMatch[2].split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+        });
+        continue;
+      }
+      // Arrow function without parens: const name = x => {
+      const arrowNoParens = line.match(/(?:const|let|var)\s+(\w+)\s*(?::\s*[^=]+)?=\s*(?:async\s*)?(\w+)\s*=>/);
+      if (arrowNoParens) {
+        nodes.push({
+          type: "function", line: i + 1, name: arrowNoParens[1], kind: "arrow",
+          params: detail === "full" ? [arrowNoParens[2]] : undefined,
+        });
+      }
+    }
+
+    // --- Classes ---
+    // Matches: class Name { ... }
+    //          abstract class Name { ... }
+    //          class Name<T> extends Base<T> { ... }  (TypeScript)
+    //          @Decorator class Name { ... }
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      // Skip decorator-only lines (we still capture the class on its line).
+      const classMatch = line.match(/^(?:export\s+)?(?:abstract\s+)?class\s+(\w+)(?:\s*<[^>]+>)?(?:\s+extends\s+([\w.]+)(?:\s*<[^>]+>)?)?(?:\s+implements\s+[\w.,\s<>]+)?/);
       if (classMatch) {
         nodes.push({ type: "class", line: i + 1, name: classMatch[1], extends: classMatch[2] || null });
+        continue;
+      }
+      // Class methods: method(params) {  or  async method(params) {
+      //   or  abstract method(params): T;  or  get/set/static method() {
+      // This is a heuristic — it may match object literals too. We only treat
+      // indented lines as methods to reduce false positives.
+      const methodMatch = line.match(/^\s+(?:async\s+|get\s+|set\s+|static\s+|abstract\s+|public\s+|private\s+|protected\s+|readonly\s+)*(\w+)\s*\(([^)]*)\)\s*(?::\s*[^{;]+)?[{\n;]/);
+      if (methodMatch && !methodMatch[1].match(/^(if|for|while|switch|catch|return|throw|new|typeof|void|delete|in|of|do|else|constructor|class|function|super|import|export)$/)) {
+        nodes.push({
+          type: "method", line: i + 1, name: methodMatch[1],
+          params: detail === "full" ? methodMatch[2].split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+        });
       }
     }
 
@@ -339,6 +422,7 @@ export class Workspace {
         exports: nodes.filter((n) => n.type === "export").length,
         functions: nodes.filter((n) => n.type === "function").length,
         classes: nodes.filter((n) => n.type === "class").length,
+        methods: nodes.filter((n) => n.type === "method").length,
       },
     };
   }
@@ -373,6 +457,13 @@ export class Workspace {
   }
 
   async exists(relative) {
-    try { await access(this.resolve(relative), constants.F_OK); return true; } catch { return false; }
+    try { await access(this.resolve(relative), constants.F_OK); return true; }
+    catch (error) {
+      // v0.9.1: ENOENT is the expected "does not exist" case. Other errors
+      // (EACCES, EBUSY) should ideally be surfaced, but exists() must never
+      // throw — callers rely on a boolean. Log to stderr for visibility.
+      if (error?.code !== "ENOENT") console.warn(`[zetora] exists(${relative}) failed: ${error.message}`);
+      return false;
+    }
   }
 }

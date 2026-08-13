@@ -31,7 +31,13 @@ export class FileWatcher extends EventEmitter {
     if (this.closed) return;
     let entries;
     try { entries = await readdir(dir, { withFileTypes: true }); }
-    catch { return; }
+    catch (error) {
+      // v0.9.1: ENOENT/EACCES are expected (dir vanished or permissions); log others.
+      if (error?.code !== "ENOENT" && error?.code !== "EACCES") {
+        console.warn(`[zetora] watcher readdir(${dir}) failed: ${error.message}`);
+      }
+      return;
+    }
     // Subscribe to this directory before descending so we don't miss creates.
     if (!this.watchers.has(dir)) {
       try {
@@ -42,7 +48,12 @@ export class FileWatcher extends EventEmitter {
         watcher.once("close", () => this.watchers.delete(dir));
         watcher.once("error", () => this.watchers.delete(dir));
         this.watchers.set(dir, watcher);
-      } catch { /* directory may have vanished */ }
+      } catch (error) {
+        // Directory may have vanished between readdir and watch; non-fatal.
+        if (error?.code !== "ENOENT") {
+          console.warn(`[zetora] watcher watch(${dir}) failed: ${error.message}`);
+        }
+      }
     }
     for (const entry of entries) {
       if (this.skip.has(entry.name) || entry.name.startsWith(".DS_Store")) continue;
@@ -75,7 +86,10 @@ export class FileWatcher extends EventEmitter {
   async close() {
     this.closed = true;
     for (const watcher of this.watchers.values()) {
-      try { watcher.close(); } catch {}
+      try { watcher.close(); } catch (error) {
+        // v0.9.1: log non-fatal close errors. Watchers may already be closed.
+        if (error?.code !== "ENOENT") console.warn(`[zetora] watcher close failed: ${error.message}`);
+      }
     }
     this.watchers.clear();
     for (const timer of this.debounce.values()) clearTimeout(timer);

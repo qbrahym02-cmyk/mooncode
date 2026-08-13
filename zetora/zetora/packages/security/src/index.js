@@ -43,14 +43,26 @@ export class PluginSigner {
     try {
       const pem = await readFile(this.privateKeyPath, "utf8");
       return createPrivateKey(pem);
-    } catch { return null; }
+    } catch (error) {
+      // ENOENT is expected (keys not generated yet); other errors (permissions,
+      // invalid PEM) should be visible to help debugging.
+      if (error?.code !== "ENOENT") {
+        console.warn(`[zetora] failed to load plugin signing private key: ${error.message}`);
+      }
+      return null;
+    }
   }
 
   async #loadPublicKey() {
     try {
       const pem = await readFile(this.publicKeyPath, "utf8");
       return createPublicKey(pem);
-    } catch { return null; }
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        console.warn(`[zetora] failed to load plugin signing public key: ${error.message}`);
+      }
+      return null;
+    }
   }
 
   /**
@@ -108,14 +120,19 @@ export class TrustRegistry {
 
   async read() {
     try {
-      return JSON.parse(await readFile(this.registryPath, "utf8"));
-    } catch { return { authors: {}, trustLevel: "first-party" }; }
+      const data = JSON.parse(await readFile(this.registryPath, "utf8"));
+      // v0.9.1: normalize older registries that lack schemaVersion.
+      if (!data.schemaVersion) data.schemaVersion = 1;
+      return data;
+    } catch { return { schemaVersion: 1, authors: {}, trustLevel: "first-party" }; }
   }
 
   async write(registry) {
     await mkdir(path.dirname(this.registryPath), { recursive: true });
+    // v0.9.1: always stamp schemaVersion on write.
+    const payload = { schemaVersion: 1, ...registry };
     const tmp = `${this.registryPath}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(tmp, JSON.stringify(registry, null, 2), { mode: 0o600 });
+    await writeFile(tmp, JSON.stringify(payload, null, 2), { mode: 0o600 });
     const { rename } = await import("node:fs/promises");
     await rename(tmp, this.registryPath);
   }

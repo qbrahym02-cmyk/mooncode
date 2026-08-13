@@ -142,7 +142,12 @@ export class AutoFix {
   async #runEslint(filePath, dryRun) {
     // Check if eslint is available locally.
     const eslintBin = path.join(this.root, "node_modules", ".bin", "eslint");
-    try { await stat(eslintBin); } catch { return { fixed: false }; }
+    try { await stat(eslintBin); }
+    catch (error) {
+      // v0.9.1: ENOENT is expected (ESLint not installed); log others.
+      if (error?.code !== "ENOENT") console.warn(`[zetora] autofix: stat(eslint) failed: ${error.message}`);
+      return { fixed: false };
+    }
     const args = ["--fix", "--format", "json", filePath];
     if (dryRun) args.splice(1, 1, "--dry-run");
     const result = await this.#runCommand(eslintBin, args, this.root);
@@ -152,13 +157,23 @@ export class AutoFix {
       const file = Array.isArray(data) ? data[0] : null;
       if (file && file.output) return { fixed: true, output: `${file.messages?.length || 0} messages` };
       if (file && file.errorCount === 0) return { fixed: false };
-    } catch {}
+    } catch (error) {
+      // v0.9.1: ESLint output was not valid JSON. Log to help debugging instead
+      // of silently returning "no fixes". This usually means ESLint crashed or
+      // the config is broken.
+      console.warn(`[zetora] autofix: ESLint output was not valid JSON: ${error.message}`);
+    }
     return { fixed: false };
   }
 
   async #runPrettier(filePath) {
     const prettierBin = path.join(this.root, "node_modules", ".bin", "prettier");
-    try { await stat(prettierBin); } catch { return { changed: false }; }
+    try { await stat(prettierBin); }
+    catch (error) {
+      // v0.9.1: ENOENT is expected (Prettier not installed); log others.
+      if (error?.code !== "ENOENT") console.warn(`[zetora] autofix: stat(prettier) failed: ${error.message}`);
+      return { changed: false };
+    }
     const result = await this.#runCommand(prettierBin, ["--write", "--log-level", "error", filePath], this.root);
     if (!result.ok) return { changed: false };
     const after = await readFile(filePath, "utf8");

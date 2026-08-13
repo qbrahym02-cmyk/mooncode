@@ -42,21 +42,34 @@ export class AgentRunner {
     this.pending = new Map();
     this.mcpToolsCache = null;
     this.mcpToolsCacheAt = 0;
+    this.#currentParentProvider = null;
   }
+
+  /** @type {{ provider?: string, model?: string, apiKey?: string, baseUrl?: string } | null} */
+  #currentParentProvider = null;
 
   /**
    * Spawn a sub-agent to handle a bounded subtask. The sub-agent gets its own
    * fresh conversation loop (no inherited history), runs to completion or step
    * limit, and returns its final text. Sub-agents cannot spawn further sub-agents
    * (depth limit = 1) to prevent runaway recursion.
+   *
+   * v0.9.1 fix: the sub-agent now inherits the parent run's provider, model,
+   * apiKey and baseUrl instead of being forced to "demo". This makes the
+   * feature actually useful in production. The parent's provider config is
+   * passed via the `__parentProvider` field set in run(); if absent (e.g. when
+   * spawn_subagent is called outside a run() context), it falls back to demo.
    */
   async #spawnSubagent(input) {
+    const parent = this.#currentParentProvider || {};
     const subInput = {
       prompt: String(input.prompt || ""),
       mode: input.mode || "build",
       maxSteps: Math.min(Number(input.maxSteps ?? 5), 8),
-      provider: "demo",
-      model: "demo-local",
+      provider: parent.provider || "demo",
+      model: parent.model || "demo-local",
+      apiKey: parent.apiKey,
+      baseUrl: parent.baseUrl,
       stream: false,
     };
     // Capture the sub-agent's events without emitting them to the parent's
@@ -249,7 +262,14 @@ export class AgentRunner {
     try {
       const file = await this.workspace.read(relative);
       return file.content;
-    } catch { return null; }
+    } catch (error) {
+      // v0.9.1: log instead of silently swallowing. ENOENT is expected (new file),
+      // but other errors (permissions, disk) should be visible.
+      if (error?.code !== "ENOENT") {
+        this.env.console?.warn?.(`[zetora] snapshotFile(${relative}) failed: ${error.message}`);
+      }
+      return null;
+    }
   }
 
   async #checkpoint(message) {
@@ -305,6 +325,16 @@ export class AgentRunner {
     const prompt = input.prompt;
     const promptContent = Array.isArray(prompt) ? prompt : String(prompt || "");
     const systemPrompt = await this.#buildSystemPrompt(input);
+    // Save the parent provider config so #spawnSubagent can inherit it.
+    // Only set if not already set (avoid a sub-agent overwriting its parent's).
+    if (!this.#currentParentProvider) {
+      this.#currentParentProvider = {
+        provider: input.provider,
+        model: input.model,
+        apiKey: input.apiKey,
+        baseUrl: input.baseUrl,
+      };
+    }
     const messages = [
       { role: "system", content: systemPrompt },
       ...(Array.isArray(input.history) ? input.history.slice(-30) : []),
