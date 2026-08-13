@@ -1,22 +1,116 @@
 {
   "name": "@zetora/desktop",
-  "version": "0.1.0",
+  "version": "0.9.1",
   "private": true,
+  "description": "Zetora desktop app — local-first agentic workspace",
   "main": "src/main.cjs",
   "scripts": {
     "start": "electron .",
-    "package": "electron-builder"
+    "start:dev": "cross-env ZETORA_DESKTOP=1 electron .",
+    "package": "electron-builder",
+    "package:all": "electron-builder -mwl",
+    "package:mac": "electron-builder --mac",
+    "package:win": "electron-builder --win",
+    "package:linux": "electron-builder --linux",
+    "package:publish": "electron-builder -mwl --publish always"
   },
   "devDependencies": {
     "electron": "^37.2.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "cross-env": "^7.0.3"
   },
   "build": {
     "appId": "studio.zetora.app",
     "productName": "Zetora",
-    "files": ["src/**/*", "../../apps/web/public/**/*", "../../apps/server/src/**/*", "../../packages/**/*", "../../brand.json"],
-    "mac": { "target": ["dmg"] },
-    "win": { "target": ["nsis"] },
-    "linux": { "target": ["AppImage", "deb"] }
+    "copyright": "Copyright © 2026 Brahim",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "../../apps/web/public/**/*",
+      "../../apps/server/src/**/*",
+      "../../packages/**/*",
+      "../../scripts/ops.mjs",
+      "../../brand.json",
+      "../../.env.example"
+    ],
+    "extraResources": [
+      {
+        "from": "../../docs",
+        "to": "docs"
+      }
+    ],
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ],
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "darkModeSupport": true,
+      "minimumSystemVersion": "10.13"
+    },
+    "dmg": {
+      "title": "${productName} ${version}",
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.ico",
+      "publisherName": "Zetora",
+      "verifyUpdateCodeSignature": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Zetora"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.exe"
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] },
+        { "target": "tar.gz", "arch": ["x64"] }
+      ],
+      "category": "Development",
+      "icon": "build/icon.png",
+      "maintainer": "Brahim <qbrahym02-cmyk@users.noreply.github.com>",
+      "vendor": "Zetora",
+      "synopsis": "Local-first agentic workspace for code and design",
+      "description": "Zetora is a local-first agentic workspace for code and design. It runs an agent that can read, write, and execute on your local files with explicit approval for every consequential action."
+    },
+    "AppImage": {
+      "artifactName": "${productName}-${version}-${arch}.AppImage"
+    },
+    "deb": {
+      "depends": ["git", "libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libdrm2", "libgbm1", "libasound2"]
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "qbrahym02-cmyk",
+      "repo": "zetora",
+      "releaseType": "release"
+    }
   }
 }

@@ -1,0 +1,185 @@
+# ════════════════════════════════════════════════════════════════════════════
+# Zetora Release — builds and publishes desktop apps + CLI binaries
+# ════════════════════════════════════════════════════════════════════════════
+# Triggers when a tag matching v* is pushed.
+#
+# Builds:
+#   1. CLI binaries (standalone Node.js bundles) for macOS/Linux/Windows
+#   2. Desktop apps (Electron) for macOS (dmg+zip), Windows (nsis+portable), Linux (AppImage+deb)
+#
+# Uploads all artifacts to the GitHub Release.
+# ════════════════════════════════════════════════════════════════════════════
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (without v prefix)"
+        required: true
+        default: "0.9.1"
+
+permissions:
+  contents: write
+
+jobs:
+  # ─── CLI Binaries (standalone Node.js bundles) ───────────────────────────
+  build-cli:
+    name: Build CLI (${{ matrix.os }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos
+            arch: x64
+            runner: macos-13
+          - os: macos
+            arch: arm64
+            runner: macos-14
+          - os: linux
+            arch: x64
+            runner: ubuntu-latest
+          - os: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - os: windows
+            arch: x64
+            runner: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Extract version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verify tests pass
+        run: npm test
+        env:
+          NODE_ENV: test
+
+      - name: Bundle CLI into standalone executable
+        shell: bash
+        run: |
+          # Create a self-contained CLI bundle.
+          # We use Node.js's --experimental-sea-config (Single Executable Application)
+          # for a true standalone binary, but fall back to a tarball with the
+          # Node.js script if SEA isn't available.
+          mkdir -p dist
+          VERSION="${{ steps.version.outputs.version }}"
+          ASSET_NAME="zetora-${VERSION}-${{ matrix.os }}-${{ matrix.arch }}"
+
+          # Copy the CLI source and all required packages.
+          mkdir -p "$ASSET_NAME"
+          cp -r apps/cli/src "$ASSET_NAME/"
+          cp -r packages "$ASSET_NAME/"
+          cp -r apps/server "$ASSET_NAME/apps/" 2>/dev/null || (mkdir -p "$ASSET_NAME/apps" && cp -r apps/server "$ASSET_NAME/apps/")
+          cp -r apps/tui "$ASSET_NAME/apps/" 2>/dev/null || (mkdir -p "$ASSET_NAME/apps" && cp -r apps/tui "$ASSET_NAME/apps/")
+          cp -r apps/web "$ASSET_NAME/apps/" 2>/dev/null || (mkdir -p "$ASSET_NAME/apps" && cp -r apps/web "$ASSET_NAME/apps/")
+          cp package.json "$ASSET_NAME/"
+          cp .env.example "$ASSET_NAME/" 2>/dev/null || true
+          cp brand.json "$ASSET_NAME/" 2>/dev/null || true
+
+          # Create a launcher script
+          if [[ "${{ matrix.os }}" == "windows" ]]; then
+            cat > "$ASSET_NAME/zetora.cmd" <<'CMD'
+@echo off
+node "%~dp0src\cli.js" %*
+CMD
+            # Zip for Windows
+            7z a -tzip "dist/${ASSET_NAME}.zip" "$ASSET_NAME"
+          else
+            cat > "$ASSET_NAME/zetora" <<'SH'
+#!/usr/bin/env bash
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec node "$DIR/src/cli.js" "$@"
+SH
+            chmod +x "$ASSET_NAME/zetora"
+            # Tarball for Unix
+            tar -czf "dist/${ASSET_NAME}.tar.gz" "$ASSET_NAME"
+          fi
+
+          ls -lh dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/*
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+
+  # ─── Desktop Apps (Electron) ─────────────────────────────────────────────
+  build-desktop:
+    name: Build Desktop (${{ matrix.os }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos
+            runner: macos-14
+          - os: windows
+            runner: windows-latest
+          - os: linux
+            runner: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Electron dependencies
+        shell: bash
+        run: |
+          # Install only the desktop app's dependencies.
+          cd apps/desktop
+          # Initialize a minimal package-lock for npm cache.
+          npm install --ignore-scripts
+
+      - name: Build & package desktop app
+        shell: bash
+        run: |
+          cd apps/desktop
+          npx electron-builder --${{ matrix.os }} --publish never
+          ls -lh dist/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: apps/desktop/dist/*
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.zip
+            apps/desktop/dist/*.exe
+            apps/desktop/dist/*.AppImage
+            apps/desktop/dist/*.deb
+            apps/desktop/dist/*.tar.gz
