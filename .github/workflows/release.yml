@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════════════════
-# Zetora Release — builds and publishes CLI binaries + desktop apps
+# Moon Code Release — builds and publishes CLI binaries + desktop apps
 # ════════════════════════════════════════════════════════════════════════════
 # Triggers when a tag matching v* is pushed.
 #
@@ -73,7 +73,7 @@ jobs:
           set -e
           mkdir -p dist
           VERSION="${{ steps.version.outputs.version }}"
-          ASSET_NAME="zetora-${VERSION}-${{ matrix.os }}"
+          ASSET_NAME="mooncode-${VERSION}-${{ matrix.os }}"
           echo "Building ${ASSET_NAME}"
 
           # Create the bundle directory.
@@ -92,11 +92,11 @@ jobs:
           mv "${ASSET_NAME}/cli-src" "${ASSET_NAME}/apps/cli/src"
 
           if [[ "${{ matrix.os }}" == windows-* ]]; then
-            printf '@echo off\r\nnode "%%~dp0apps\\cli\\src\\cli.js" %%*\r\n' > "${ASSET_NAME}/zetora.cmd"
+            printf '@echo off\r\nnode "%%~dp0apps\\cli\\src\\cli.js" %%*\r\n' > "${ASSET_NAME}/mooncode.cmd"
             7z a -tzip "dist/${ASSET_NAME}.zip" "${ASSET_NAME}"
           else
-            printf '#!/usr/bin/env bash\nDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\nexec node "$DIR/apps/cli/src/cli.js" "$@"\n' > "${ASSET_NAME}/zetora"
-            chmod +x "${ASSET_NAME}/zetora"
+            printf '#!/usr/bin/env bash\nDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\nexec node "$DIR/apps/cli/src/cli.js" "$@"\n' > "${ASSET_NAME}/mooncode"
+            chmod +x "${ASSET_NAME}/mooncode"
             tar -czf "dist/${ASSET_NAME}.tar.gz" "${ASSET_NAME}"
           fi
 

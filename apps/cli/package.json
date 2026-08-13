@@ -1,16 +1,16 @@
 {
-  "name": "zetora",
+  "name": "mooncode",
   "version": "0.9.1",
-  "description": "Zetora CLI — local-first agentic workspace for code and design",
+  "description": "Moon Code CLI — local-first agentic workspace for code and design",
   "license": "MIT",
   "author": "Brahim <qbrahym02-cmyk@users.noreply.github.com>",
-  "homepage": "https://github.com/qbrahym02-cmyk/zetora",
+  "homepage": "https://github.com/qbrahym02-cmyk/mooncode",
   "repository": {
     "type": "git",
-    "url": "https://github.com/qbrahym02-cmyk/zetora.git"
+    "url": "https://github.com/qbrahym02-cmyk/mooncode.git"
   },
   "bugs": {
-    "url": "https://github.com/qbrahym02-cmyk/zetora/issues"
+    "url": "https://github.com/qbrahym02-cmyk/mooncode/issues"
   },
   "keywords": [
     "agent", "ai", "coding-agent", "local-first", "cli", "tui",
@@ -18,7 +18,7 @@
   ],
   "type": "module",
   "bin": {
-    "zetora": "./src/cli.js"
+    "mooncode": "./src/cli.js"
   },
   "engines": {
     "node": ">=20.12"

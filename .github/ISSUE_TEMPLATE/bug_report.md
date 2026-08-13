@@ -27,7 +27,7 @@ assignees: ''
 
 ## بيئة التشغيل
 
-- **إصدار Zetora**: [مثال: 0.9.1]
+- **إصدار Moon Code**: [مثال: 0.9.1]
 - **إصدار Node.js**: [مثال: 22.10.0] — شغّل `node --version`
 - **نظام التشغيل**: [مثال: Ubuntu 24.04, macOS 15, Windows 11]
 - **المزوّد المستخدم**: [مثال: OpenAI، Anthropic، demo]

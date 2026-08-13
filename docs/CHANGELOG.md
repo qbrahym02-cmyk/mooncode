@@ -3,7 +3,7 @@
 ## v0.9.0 — 2026-08-13
 
 ### Security (critical)
-- **ED25519 plugin signing** replaces the v0.6-0.8 SHA-256 self-hash that was misleadingly named "verified". Real public-key cryptography via `node:crypto`'s `sign()`/`verify()`. The Zetora team holds the private key; the public key ships with Zetora. Plugins signed by the private key can be verified by anyone. Malicious plugins cannot be "signed" by an attacker without the private key.
+- **ED25519 plugin signing** replaces the v0.6-0.8 SHA-256 self-hash that was misleadingly named "verified". Real public-key cryptography via `node:crypto`'s `sign()`/`verify()`. The Moon Code team holds the private key; the public key ships with Moon Code. Plugins signed by the private key can be verified by anyone. Malicious plugins cannot be "signed" by an attacker without the private key.
 - New `PluginSigner` class in `packages/security/src/index.js` with `generateKeys()`, `sign()`, `verify()`.
 - New `TrustRegistry` tracks trusted author public keys with trust levels (`trusted`/`first-party`).
 - `PluginRegistry` (v0.9) uses honest naming:
@@ -90,13 +90,13 @@
 - New endpoints: `GET /api/lsp/status`, `POST /api/lsp/diagnose`, `POST /api/lsp/install`.
 
 ### Plugin registry (new `packages/plugins`, hardened in v0.9)
-- `PluginRegistry` reads `plugin.json` manifests from `.zetora/plugins/<id>/`.
+- `PluginRegistry` reads `plugin.json` manifests from `.mooncode/plugins/<id>/`.
 - `install()`, `uninstall()`, `list()`, `get()`, `hasCapability()`.
 - Capabilities: `tools`, `ui`, `provider`, `skills`, `artifacts`.
 - **v0.6 limitation** (fixed in v0.9): the `verified` field was a self-computed SHA-256 hash that anyone could forge. It was misleadingly named. v0.9 replaces it with ED25519 signing.
 
 ### Security package (new `packages/security`, expanded in v0.9)
-- `AuditLog`: immutable NDJSON audit log at `.zetora/audit.log` with batching (50 entries or 2s).
+- `AuditLog`: immutable NDJSON audit log at `.mooncode/audit.log` with batching (50 entries or 2s).
 - `RateLimiter`: sliding-window counter per identifier (IP or session). HTTP headers: `x-ratelimit-limit`, `x-ratelimit-remaining`, `x-ratelimit-reset`, `retry-after`.
 - `redactSecrets()`: 11 patterns for API keys, tokens, private keys, passwords. Returns `{ redacted, found }`.
 - `detectSecrets()`: returns list of detected secret types without values.
@@ -162,7 +162,7 @@
 
 ### Context files (new `packages/context`)
 - `ContextFiles` class manages a manifest of standing workspace files (up to 8, max 64KB each) that get prepended to the system prompt on every model call. Typical use: coding standards, project conventions, build instructions.
-- Manifest stored at `.zetora/context.json`; the actual files live in the workspace so they can be edited with normal tools.
+- Manifest stored at `.mooncode/context.json`; the actual files live in the workspace so they can be edited with normal tools.
 - Lazy pruning: missing files are silently dropped from the manifest on the next `assemble()`.
 - New endpoints: `GET /api/context`, `POST /api/context`, `DELETE /api/context`.
 
@@ -174,7 +174,7 @@
 
 ### MCP client (new `packages/mcp`)
 - `McpClient` speaks JSON-RPC 2.0 over stdio: `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, notifications.
-- `McpRegistry` tracks multiple named clients by id. Config persists to `.zetora/mcp.json`.
+- `McpRegistry` tracks multiple named clients by id. Config persists to `.mooncode/mcp.json`.
 - Tools from connected servers are namespaced as `mcp.<serverId>.<toolName>` to avoid collisions with native tools.
 - The agent runner exposes MCP tools alongside native tools, but routes every MCP call through approval first (treated as `Risk.EXTERNAL`).
 - Best-effort auto-connect on server startup.
@@ -229,7 +229,7 @@
 
 ### Git integration (new `packages/git`)
 - New `Git` class wraps the local `git` binary for `init`, `status`, `diff`, `log`, `branches`, `checkpoint`, `undo`, `head`, `createBranch`, `checkout`, `readFileAtRef`.
-- Every `write_file` and `replace_text` the agent executes now creates a checkpoint commit tagged `[zetora-checkpoint]` so the run is always undoable.
+- Every `write_file` and `replace_text` the agent executes now creates a checkpoint commit tagged `[mooncode-checkpoint]` so the run is always undoable.
 - `AgentRunner.undoLastCheckpoint()` exposes `git reset --hard HEAD~1` to the API surface.
 - New endpoints: `GET /api/git/{status,diff,log,branches,head}`, `POST /api/git/{init,checkpoint,undo}`.
 
@@ -254,7 +254,7 @@
 
 ### File watcher with SSE (new `packages/watcher`)
 - `FileWatcher` uses Node's `fs.watch` (not `fs/promises.watch`) to recursively attach persistent watchers to every directory under the workspace.
-- Skips `.git`, `node_modules`, `.next`, `dist`, `build`, `out`, `target`, `.cache`, `.zetora`.
+- Skips `.git`, `node_modules`, `.next`, `dist`, `build`, `out`, `target`, `.cache`, `.mooncode`.
 - Debounces bursts of events at 120ms.
 - New `GET /api/events` SSE endpoint streams `file.changed` events to all connected clients.
 - The web client auto-refreshes the file tree and re-renders the inspector preview when the open file changes.
@@ -267,7 +267,7 @@
 - All file opens now go through `/api/artifact`, so images, SVGs, markdown, JSON and source code all render in the inspector without bespoke handling.
 
 ### Tests
-- New `tests/git.test.js`: init + checkpoint + undo round trip; non-zetora commit protection; log ordering.
+- New `tests/git.test.js`: init + checkpoint + undo round trip; non-mooncode commit protection; log ordering.
 - New `tests/pty.test.js`: persistent cwd and env across commands; resize.
 - New `tests/artifacts.test.js`: detectKind, HTML passthrough, markdown wrapping, image data URI, HTML escaping.
 - New `tests/watcher.test.js`: change events on write; ignored directories.

@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════════════════
-// Zetora Desktop — Electron main process
+// Moon Code Desktop — Electron main process
 // ════════════════════════════════════════════════════════════════════════════
-// Spawns a local Zetora server on 127.0.0.1 and loads it in a BrowserWindow.
+// Spawns a local Moon Code server on 127.0.0.1 and loads it in a BrowserWindow.
 // The server runs in a forked child process so we can cleanly shut it down
 // when the app quits. Security: contextIsolation on, nodeIntegration off,
 // sandbox on, spellcheck on.
@@ -15,18 +15,18 @@ const fs = require('node:fs');
 let server = null;
 let mainWindow = null;
 let tray = null;
-const port = process.env.ZETORA_DESKTOP_PORT || '4173';
-const isDev = !!process.env.ZETORA_DESKTOP_DEV;
+const port = process.env.MOONCODE_DESKTOP_PORT || '4173';
+const isDev = !!process.env.MOONCODE_DESKTOP_DEV;
 const isMac = process.platform === 'darwin';
 const isWin = process.platform === 'win32';
 const isLinux = process.platform === 'linux';
 
 // ─── Logging ────────────────────────────────────────────────────────────────
 function log(...args) {
-  console.log('[zetora-desktop]', ...args);
+  console.log('[mooncode-desktop]', ...args);
 }
 function logError(...args) {
-  console.error('[zetora-desktop]', ...args);
+  console.error('[mooncode-desktop]', ...args);
 }
 
 // ─── Server lifecycle ───────────────────────────────────────────────────────
@@ -46,9 +46,9 @@ function getServerEntry() {
 }
 
 function startLocalServer() {
-  if (process.env.ZETORA_DESKTOP_URL) {
-    log('Using external server URL:', process.env.ZETORA_DESKTOP_URL);
-    return process.env.ZETORA_DESKTOP_URL;
+  if (process.env.MOONCODE_DESKTOP_URL) {
+    log('Using external server URL:', process.env.MOONCODE_DESKTOP_URL);
+    return process.env.MOONCODE_DESKTOP_URL;
   }
 
   const serverEntry = getServerEntry();
@@ -56,9 +56,9 @@ function startLocalServer() {
 
   const env = {
     ...process.env,
-    ZETORA_HOST: '127.0.0.1',
-    ZETORA_PORT: port,
-    ZETORA_DESKTOP: '1',
+    MOONCODE_HOST: '127.0.0.1',
+    MOONCODE_PORT: port,
+    MOONCODE_DESKTOP: '1',
     NODE_ENV: isDev ? 'development' : 'production',
   };
 
@@ -81,7 +81,7 @@ function startLocalServer() {
   });
   server.on('error', (error) => {
     logError('Server error:', error.message);
-    dialog.showErrorBox('Zetora Server Error', `Failed to start the local server:\n\n${error.message}`);
+    dialog.showErrorBox('Moon Code Server Error', `Failed to start the local server:\n\n${error.message}`);
   });
 
   return `http://127.0.0.1:${port}`;
@@ -98,7 +98,7 @@ async function waitForServer(url, retries = 100) {
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error(`Zetora local service did not start at ${url} after ${retries} retries`);
+  throw new Error(`Moon Code local service did not start at ${url} after ${retries} retries`);
 }
 
 async function stopServer() {
@@ -126,7 +126,7 @@ async function createWindow() {
     await waitForServer(url);
   } catch (error) {
     logError(error.message);
-    dialog.showErrorBox('Zetora Startup Error', error.message);
+    dialog.showErrorBox('Moon Code Startup Error', error.message);
     app.quit();
     return;
   }
@@ -197,7 +197,7 @@ function createTray() {
   const icon = nativeImage.createFromPath(iconPath);
   if (icon.isEmpty()) return;
   tray = new Tray(icon);
-  tray.setToolTip('Zetora');
+  tray.setToolTip('Moon Code');
   tray.on('click', () => {
     if (mainWindow) {
       mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show();
@@ -206,8 +206,8 @@ function createTray() {
     }
   });
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'Show Zetora', click: () => mainWindow?.show() },
-    { label: 'Hide Zetora', click: () => mainWindow?.hide() },
+    { label: 'Show Moon Code', click: () => mainWindow?.show() },
+    { label: 'Hide Moon Code', click: () => mainWindow?.hide() },
     { type: 'separator' },
     { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } },
   ]);
@@ -289,11 +289,11 @@ function buildMenu() {
     {
       role: 'help',
       submenu: [
-        { label: 'Documentation', click: () => shell.openExternal('https://github.com/qbrahym02-cmyk/zetora#readme') },
-        { label: 'Report an Issue', click: () => shell.openExternal('https://github.com/qbrahym02-cmyk/zetora/issues/new') },
-        { label: 'Discussions', click: () => shell.openExternal('https://github.com/qbrahym02-cmyk/zetora/discussions') },
+        { label: 'Documentation', click: () => shell.openExternal('https://github.com/qbrahym02-cmyk/mooncode#readme') },
+        { label: 'Report an Issue', click: () => shell.openExternal('https://github.com/qbrahym02-cmyk/mooncode/issues/new') },
+        { label: 'Discussions', click: () => shell.openExternal('https://github.com/qbrahym02-cmyk/mooncode/discussions') },
         { type: 'separator' },
-        { label: `Zetora v${app.getVersion()}`, enabled: false },
+        { label: `Moon Code v${app.getVersion()}`, enabled: false },
       ],
     },
   ];
@@ -305,7 +305,7 @@ app.whenReady().then(() => {
   buildMenu();
   createWindow().then(createTray).catch((error) => {
     logError('Failed to create window:', error);
-    dialog.showErrorBox('Zetora Error', error.message);
+    dialog.showErrorBox('Moon Code Error', error.message);
     app.quit();
   });
 }).catch((error) => {

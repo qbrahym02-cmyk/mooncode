@@ -1,6 +1,6 @@
-# Zetora Desktop
+# Moon Code Desktop
 
-Electron shell around the same local server and Web client used by Zetora Web.
+Electron shell around the same local server and Web client used by Moon Code Web.
 
 ```bash
 npm install

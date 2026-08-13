@@ -10,7 +10,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * A tiny MCP server script used only for testing the client. It speaks the
- * JSON-RPC 2.0 subset of MCP that Zetora relies on.
+ * JSON-RPC 2.0 subset of MCP that Moon Code relies on.
  */
 const TEST_SERVER = `
 import readline from "node:readline";
@@ -53,7 +53,7 @@ async function spawnTestServer(workdir) {
 }
 
 test("mcp client initialize + listTools + callTool round trip", async (t) => {
-  const workdir = await mkdtemp(path.join(os.tmpdir(), "zetora-mcp-"));
+  const workdir = await mkdtemp(path.join(os.tmpdir(), "mooncode-mcp-"));
   t.after(() => rm(workdir, { recursive: true, force: true }));
   const serverPath = await spawnTestServer(workdir);
 
@@ -77,7 +77,7 @@ test("mcp client initialize + listTools + callTool round trip", async (t) => {
 });
 
 test("mcp registry aggregates tools with namespaced names", async (t) => {
-  const workdir = await mkdtemp(path.join(os.tmpdir(), "zetora-mcp-reg-"));
+  const workdir = await mkdtemp(path.join(os.tmpdir(), "mooncode-mcp-reg-"));
   t.after(() => rm(workdir, { recursive: true, force: true }));
   const serverPath = await spawnTestServer(workdir);
   const registry = new McpRegistry(path.join(workdir, "data"), workdir);

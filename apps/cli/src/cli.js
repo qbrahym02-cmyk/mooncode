@@ -1,20 +1,20 @@
 #!/usr/bin/env node
 /**
- * Zetora CLI — unified command-line interface.
+ * Moon Code CLI — unified command-line interface.
  *
  * Usage:
- *   zetora                    Start TUI in current directory
- *   zetora tui                Start TUI (explicit)
- *   zetora serve              Start HTTP server
- *   zetora open               Open workspace in browser
- *   zetora version            Print version
- *   zetora health             Check server health
- *   zetora help               Show help
+ *   mooncode                    Start TUI in current directory
+ *   mooncode tui                Start TUI (explicit)
+ *   mooncode serve              Start HTTP server
+ *   mooncode open               Open workspace in browser
+ *   mooncode version            Print version
+ *   mooncode health             Check server health
+ *   mooncode help               Show help
  *
  * Install globally:
- *   npm install -g zetora
+ *   npm install -g mooncode
  *   # or
- *   curl -fsSL https://raw.githubusercontent.com/qbrahym02-cmyk/zetora/main/scripts/install/install.sh | bash
+ *   curl -fsSL https://raw.githubusercontent.com/qbrahym02-cmyk/mooncode/main/scripts/install/install.sh | bash
  *
  * @author Brahim <qbrahym02-cmyk@users.noreply.github.com>
  */
@@ -28,7 +28,7 @@ import os from "node:os";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const VERSION = "0.9.5";
+const VERSION = "1.0.0";
 const DEFAULT_PORT = 4173;
 
 // ANSI colors for pretty output (disabled on Windows non-TTY).
@@ -42,7 +42,7 @@ const c = supportsColor ? {
 const color = (text, tone) => `${c[tone] || ""}${text}${c.reset}`;
 
 // ─── Logo ───────────────────────────────────────────────────────────────────
-const LOGO = `${c.violet}▰ ▰${c.reset}  ${c.bold}ZETORA${c.reset} ${c.dim}v${VERSION}${c.reset}`;
+const LOGO = `${c.violet}▰ ▰${c.reset}  ${c.bold}MOONCODE${c.reset} ${c.dim}v${VERSION}${c.reset}`;
 
 // ─── Help ───────────────────────────────────────────────────────────────────
 function showHelp() {
@@ -52,58 +52,37 @@ ${LOGO}
 ${color("مساحة عمل محلية للبرمجة والتصميم بالوكلاء", "dim")}
 
 ${color("USAGE", "violet")}
-  zetora <command> [options]
+  mooncode <command> [options]
 
 ${color("COMMANDS", "violet")}
-  ${color("tui", "mint")}             Start the terminal UI (default)
-  ${color("serve", "mint")}           Start the HTTP server
-  ${color("open", "mint")}            Open the workspace in your browser
-  ${color("health", "mint")}          Check if a running server is healthy
-  ${color("version", "mint")}         Print the version
-  ${color("help", "mint")}            Show this help message
+  ${color("start", "mint")}            ${color("★ ابدأ كل شيء (الخادم + المتصفح)", "bold")}
+  ${color("tui", "mint")}              Start the terminal UI
+  ${color("serve", "mint")}            Start HTTP server only
+  ${color("health", "mint")}           Check server health
+  ${color("version", "mint")}          Print version
+  ${color("help", "mint")}             Show this help
+
+${color("QUICK START", "violet")}
+  ${color("mooncode start", "mint")}   ${color("← هذا كل ما تحتاجه!", "dim")}
 
 ${color("OPTIONS", "violet")}
   ${color("--workspace <path>", "amber")}   Workspace directory (default: current directory)
   ${color("--port <number>", "amber")}      HTTP port (default: ${DEFAULT_PORT})
   ${color("--provider <name>", "amber")}    Provider: demo|openai|anthropic|google|openrouter|ollama|custom
-  ${color("--model <name>", "amber")}       Model name (e.g. gpt-5-mini, claude-sonnet-4-5)
+  ${color("--model <name>", "amber")}       Model name
   ${color("--host <addr>", "amber")}        Bind address (default: 127.0.0.1)
-  ${color("--version, -v", "amber")}        Print version
-  ${color("--help, -h", "amber")}           Show help
-
-${color("EXAMPLES", "violet")}
-  ${color("# Start TUI in current directory", "dim")}
-  zetora
-
-  ${color("# Start server on port 3000 with OpenAI", "dim")}
-  zetora serve --port 3000 --provider openai --model gpt-5-mini
-
-  ${color("# Open workspace in browser", "dim")}
-  zetora open --workspace ./my-project
-
-  ${color("# Check server health", "dim")}
-  zetora health --port 4173
 
 ${color("ENVIRONMENT", "violet")}
   OPENAI_API_KEY          OpenAI API key
   ANTHROPIC_API_KEY       Anthropic API key
-  GOOGLE_API_KEY          Google API key
-  OPENROUTER_API_KEY      OpenRouter API key
-  ZETORA_PROVIDER         Default provider (default: demo)
-  ZETORA_MODEL            Default model
+  MOONCODE_PROVIDER         Default provider (default: demo)
 
 ${color("INSTALL", "violet")}
-  ${color("# npm", "mint")}
-  npm install -g zetora
-
-  ${color("# curl (macOS/Linux)", "mint")}
-  curl -fsSL https://raw.githubusercontent.com/qbrahym02-cmyk/zetora/main/scripts/install/install.sh | bash
-
-  ${color("# PowerShell (Windows)", "mint")}
-  iwr -useb https://raw.githubusercontent.com/qbrahym02-cmyk/zetora/main/scripts/install/install.ps1 | iex
+  ${color("npx mooncode", "mint")}     ${color("← أسرع طريقة", "dim")}
+  ${color("npm i -g mooncode", "mint")}
 
 ${color("DOCS", "violet")}
-  https://github.com/qbrahym02-cmyk/zetora#readme
+  https://github.com/qbrahym02-cmyk/mooncode
 
 ${color("COPYRIGHT", "dim")}
   Copyright © 2026 Brahim · MIT License
@@ -111,7 +90,7 @@ ${color("COPYRIGHT", "dim")}
 }
 
 // ─── Find the monorepo root ─────────────────────────────────────────────────
-// When installed via npm, the CLI is bundled with the full Zetora source.
+// When installed via npm, the CLI is bundled with the full Moon Code source.
 // When run from the dev monorepo, we walk up to find it.
 function findMonorepoRoot() {
   let dir = __dirname;
@@ -138,7 +117,7 @@ function startTui(args) {
   if (opts.model) tuiArgs.push("--model", opts.model);
 
   if (!existsSync(tuiEntry)) {
-    console.error(color("✗ TUI entry not found. Are you running from the Zetora source?", "red"));
+    console.error(color("✗ TUI entry not found. Are you running from the Moon Code source?", "red"));
     console.error(color(`  Expected: ${tuiEntry}`, "dim"));
     process.exit(1);
   }
@@ -151,17 +130,17 @@ function startServer(args) {
   const opts = parseArgs(args);
   const env = {
     ...process.env,
-    ZETORA_HOST: opts.host || "127.0.0.1",
-    ZETORA_PORT: String(opts.port || DEFAULT_PORT),
-    ZETORA_WORKSPACE: opts.workspace || process.cwd(),
+    MOONCODE_HOST: opts.host || "127.0.0.1",
+    MOONCODE_PORT: String(opts.port || DEFAULT_PORT),
+    MOONCODE_WORKSPACE: opts.workspace || process.cwd(),
   };
-  if (opts.provider) env.ZETORA_PROVIDER = opts.provider;
-  if (opts.model) env.ZETORA_MODEL = opts.model;
+  if (opts.provider) env.MOONCODE_PROVIDER = opts.provider;
+  if (opts.model) env.MOONCODE_MODEL = opts.model;
 
-  console.log(color(`▰ ▰  ZETORA ${c.dim}v${VERSION}${c.reset}`, "violet"));
-  console.log(color(`  workspace  ${env.ZETORA_WORKSPACE}`, "dim"));
-  console.log(color(`  server     http://${env.ZETORA_HOST}:${env.ZETORA_PORT}`, "dim"));
-  console.log(color(`  provider   ${env.ZETORA_PROVIDER || "demo"}`, "dim"));
+  console.log(color(`▰ ▰  MOONCODE ${c.dim}v${VERSION}${c.reset}`, "violet"));
+  console.log(color(`  workspace  ${env.MOONCODE_WORKSPACE}`, "dim"));
+  console.log(color(`  server     http://${env.MOONCODE_HOST}:${env.MOONCODE_PORT}`, "dim"));
+  console.log(color(`  provider   ${env.MOONCODE_PROVIDER || "demo"}`, "dim"));
   console.log();
 
   if (!existsSync(serverEntry)) {
@@ -188,9 +167,9 @@ async function openWorkspace(args) {
     // Start server in background, then open browser.
     const env = {
       ...process.env,
-      ZETORA_HOST: "127.0.0.1",
-      ZETORA_PORT: String(port),
-      ZETORA_WORKSPACE: opts.workspace || process.cwd(),
+      MOONCODE_HOST: "127.0.0.1",
+      MOONCODE_PORT: String(port),
+      MOONCODE_WORKSPACE: opts.workspace || process.cwd(),
     };
     const child = spawn("node", [serverEntry], {
       stdio: "ignore",
@@ -238,7 +217,7 @@ async function checkHealth(args) {
     }
 
     const data = await response.json();
-    console.log(color("▰ ▰  ZETORA HEALTH", "violet"));
+    console.log(color("▰ ▰  MOONCODE HEALTH", "violet"));
     console.log(color("──────────────────────────────────────", "dim"));
     console.log(`  ${color("status", "mint")}      ${data.ok ? color("✓ healthy", "mint") : color("✗ unhealthy", "red")}`);
     console.log(`  ${color("version", "mint")}     ${data.version}`);
@@ -258,7 +237,7 @@ async function checkHealth(args) {
 }
 
 function showVersion() {
-  console.log(`zetora v${VERSION}`);
+  console.log(`mooncode v${VERSION}`);
 }
 
 // ─── Argument parsing ───────────────────────────────────────────────────────
@@ -277,21 +256,91 @@ function parseArgs(args) {
   return opts;
 }
 
+// ─── start: the main command ────────────────────────────────────────────────
+// Starts the server in the foreground and opens the browser after it's ready.
+async function startServerAndOpen(args) {
+  const opts = parseArgs(args);
+  const port = opts.port || DEFAULT_PORT;
+  const host = opts.host || "127.0.0.1";
+  const workspace = opts.workspace || process.cwd();
+  const url = `http://${host}:${port}`;
+
+  console.log(color(`▰ ▰  MOON CODE ${c.dim}v${VERSION}${c.reset}`, "violet"));
+  console.log(color(`  workspace  ${workspace}`, "dim"));
+  console.log(color(`  server     ${url}`, "dim"));
+  console.log(color(`  provider   ${opts.provider || process.env.MOONCODE_PROVIDER || "demo"}`, "dim"));
+  console.log();
+
+  if (!existsSync(serverEntry)) {
+    console.error(color("✗ Server entry not found.", "red"));
+    process.exit(1);
+  }
+
+  // Start the server in a detached background process.
+  const env = {
+    ...process.env,
+    MOONCODE_HOST: host,
+    MOONCODE_PORT: String(port),
+    MOONCODE_WORKSPACE: workspace,
+  };
+  if (opts.provider) env.MOONCODE_PROVIDER = opts.provider;
+  if (opts.model) env.MOONCODE_MODEL = opts.model;
+
+  const child = spawn("node", [serverEntry], {
+    stdio: "inherit",
+    env,
+  });
+  child.on("close", (code) => process.exit(code ?? 0));
+
+  // Wait for server to be ready, then open the browser.
+  let ready = false;
+  for (let i = 0; i < 50; i += 1) {
+    try {
+      const response = await fetch(`${url}/api/health`);
+      if (response.ok) { ready = true; break; }
+    } catch {}
+    await new Promise((r) => setTimeout(r, 200));
+  }
+
+  if (ready) {
+    console.log(color(`\n✓ Server ready at ${url}`, "mint"));
+    // Open the browser.
+    const openCommands = {
+      darwin: ["open", [url]],
+      win32: ["cmd", ["/c", "start", url]],
+      linux: ["xdg-open", [url]],
+    };
+    const platform = os.platform();
+    const [cmd, cmdArgs] = openCommands[platform] || openCommands.linux;
+    console.log(color(`→ Opening browser...`, "violet"));
+    spawn(cmd, cmdArgs, { stdio: "ignore", detached: true }).unref();
+  } else {
+    console.log(color(`\n⚠ Server starting (browser will not open automatically)`, "amber"));
+    console.log(color(`  Open manually: ${url}`, "dim"));
+  }
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
+// mooncode start  →  starts server + opens browser (the main command)
+// mooncode tui    →  starts terminal UI
+// mooncode help   →  shows help
+// mooncode version →  shows version
 const args = process.argv.slice(2);
-const command = args[0] || "tui";
-const commandArgs = command === "tui" || command === "serve" || command === "open" || command === "health"
-  ? args.slice(1)
-  : args;
+const command = args[0] || "help";
+const commandArgs = args.slice(1);
 
 switch (command) {
+  case "start":
+    // The main command: start server, then open browser.
+    startServerAndOpen(commandArgs);
+    break;
   case "tui":
   case "ui":
     startTui(commandArgs);
     break;
   case "serve":
   case "server":
-  case "start":
+    // Just the server, no browser.
     startServer(commandArgs);
     break;
   case "open":
@@ -310,11 +359,10 @@ switch (command) {
   case "help":
   case "--help":
   case "-h":
-  case undefined:
     showHelp();
     break;
   default:
     console.error(color(`Unknown command: ${command}`, "red"));
-    console.error(color(`Run 'zetora help' for usage.`, "dim"));
+    console.error(color(`Run 'mooncode help' for usage.`, "dim"));
     process.exit(1);
 }

@@ -11,11 +11,11 @@ import { PluginRegistry } from "../packages/plugins/src/index.js";
 
 // === Cryptographic plugin signing ===
 test("ED25519 signing: generate keys, sign, verify", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-signer-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-signer-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const signer = new PluginSigner(root);
   await signer.generateKeys();
-  const manifest = { name: "Test", version: "1.0.0", author: "zetora-team" };
+  const manifest = { name: "Test", version: "1.0.0", author: "mooncode-team" };
   const entry = "export default {};";
   const signature = await signer.sign(manifest, entry);
   assert.ok(signature.startsWith("ed25519:"));
@@ -24,11 +24,11 @@ test("ED25519 signing: generate keys, sign, verify", async (t) => {
 });
 
 test("ED25519 verification rejects tampered content", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-signer-tamper-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-signer-tamper-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const signer = new PluginSigner(root);
   await signer.generateKeys();
-  const manifest = { name: "Test", version: "1.0.0", author: "zetora-team" };
+  const manifest = { name: "Test", version: "1.0.0", author: "mooncode-team" };
   const entry = "original content";
   const signature = await signer.sign(manifest, entry);
   // Tamper with the entry.
@@ -38,8 +38,8 @@ test("ED25519 verification rejects tampered content", async (t) => {
 });
 
 test("ED25519 verification rejects signature from wrong key", async (t) => {
-  const root1 = await mkdtemp(path.join(os.tmpdir(), "zetora-key1-"));
-  const root2 = await mkdtemp(path.join(os.tmpdir(), "zetora-key2-"));
+  const root1 = await mkdtemp(path.join(os.tmpdir(), "mooncode-key1-"));
+  const root2 = await mkdtemp(path.join(os.tmpdir(), "mooncode-key2-"));
   t.after(() => rm(root1, { recursive: true, force: true }));
   t.after(() => rm(root2, { recursive: true, force: true }));
   const signer1 = new PluginSigner(root1);
@@ -55,7 +55,7 @@ test("ED25519 verification rejects signature from wrong key", async (t) => {
 });
 
 test("plugin with ED25519 signer gets signedByAuthor when author is trusted", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-trust-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-trust-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const signer = new PluginSigner(root);
   await signer.generateKeys();
@@ -63,8 +63,8 @@ test("plugin with ED25519 signer gets signedByAuthor when author is trusted", as
   const reg = new PluginRegistry(root, signer, trust);
   // Read the public key and add the author to the trust registry.
   const pubKey = await readFile(path.join(root, "plugin-signing.pub"), "utf8");
-  await trust.addAuthor("zetora-team", pubKey, "Zetora Team", "trusted");
-  const manifest = { name: "Test", version: "1.0.0", author: "zetora-team", entry: "index.js", capabilities: ["tools"] };
+  await trust.addAuthor("mooncode-team", pubKey, "Moon Code Team", "trusted");
+  const manifest = { name: "Test", version: "1.0.0", author: "mooncode-team", entry: "index.js", capabilities: ["tools"] };
   const entry = "export default {};";
   const installed = await reg.install("test-plugin", manifest, entry);
   assert.equal(installed.signatureType, "ed25519");
@@ -75,7 +75,7 @@ test("plugin with ED25519 signer gets signedByAuthor when author is trusted", as
 });
 
 test("plugin without trusted author is NOT verified even with valid signature", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-untrusted-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-untrusted-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const signer = new PluginSigner(root);
   await signer.generateKeys();
@@ -93,7 +93,7 @@ test("plugin without trusted author is NOT verified even with valid signature", 
 
 // === Trust registry ===
 test("trust registry add and check", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-trust-reg-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-trust-reg-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const trust = new TrustRegistry(root);
   await trust.addAuthor("alice", "pubkey-123", "Alice", "trusted");
@@ -106,7 +106,7 @@ test("trust registry add and check", async (t) => {
 
 // === Audit log ===
 test("audit log records and reads entries", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-audit-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-audit-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const log = new AuditLog(root);
   await log.record({ action: "file.write", path: "test.js", bytes: 100 });
@@ -121,7 +121,7 @@ test("audit log records and reads entries", async (t) => {
 });
 
 test("audit log filters by action", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-audit-filter-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-audit-filter-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const log = new AuditLog(root);
   await log.record({ action: "file.write", path: "a.js" });

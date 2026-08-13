@@ -1,9 +1,9 @@
 {
-  "name": "@zetora/tui",
+  "name": "@mooncode/tui",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "zetora": "src/cli.js"
+    "mooncode": "src/cli.js"
   }
 }

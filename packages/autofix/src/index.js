@@ -48,7 +48,7 @@ export class AutoFix {
     const walk = async (folder) => {
       const entries = await readdir(folder, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.name.startsWith(".") || ["node_modules", "dist", "build", "out", "target", ".cache", ".zetora"].includes(entry.name)) continue;
+        if (entry.name.startsWith(".") || ["node_modules", "dist", "build", "out", "target", ".cache", ".mooncode"].includes(entry.name)) continue;
         const abs = path.join(folder, entry.name);
         if (entry.isDirectory()) await walk(abs);
         else {
@@ -145,7 +145,7 @@ export class AutoFix {
     try { await stat(eslintBin); }
     catch (error) {
       // v0.9.1: ENOENT is expected (ESLint not installed); log others.
-      if (error?.code !== "ENOENT") console.warn(`[zetora] autofix: stat(eslint) failed: ${error.message}`);
+      if (error?.code !== "ENOENT") console.warn(`[mooncode] autofix: stat(eslint) failed: ${error.message}`);
       return { fixed: false };
     }
     const args = ["--fix", "--format", "json", filePath];
@@ -161,7 +161,7 @@ export class AutoFix {
       // v0.9.1: ESLint output was not valid JSON. Log to help debugging instead
       // of silently returning "no fixes". This usually means ESLint crashed or
       // the config is broken.
-      console.warn(`[zetora] autofix: ESLint output was not valid JSON: ${error.message}`);
+      console.warn(`[mooncode] autofix: ESLint output was not valid JSON: ${error.message}`);
     }
     return { fixed: false };
   }
@@ -171,7 +171,7 @@ export class AutoFix {
     try { await stat(prettierBin); }
     catch (error) {
       // v0.9.1: ENOENT is expected (Prettier not installed); log others.
-      if (error?.code !== "ENOENT") console.warn(`[zetora] autofix: stat(prettier) failed: ${error.message}`);
+      if (error?.code !== "ENOENT") console.warn(`[mooncode] autofix: stat(prettier) failed: ${error.message}`);
       return { changed: false };
     }
     const result = await this.#runCommand(prettierBin, ["--write", "--log-level", "error", filePath], this.root);

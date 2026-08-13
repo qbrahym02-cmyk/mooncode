@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0c0d10">
-  <meta name="description" content="Zetora — local-first agentic workspace for code and design">
-  <title>Zetora</title>
+  <meta name="description" content="Moon Code — local-first agentic workspace for code and design">
+  <title>Moon Code</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -14,7 +14,7 @@
 <body>
   <div id="app" class="app-shell" data-inspector="true" data-sidebar="true">
     <aside class="activity-rail" aria-label="التنقل الرئيسي">
-      <button class="brand-mark" data-action="home" aria-label="Zetora home">
+      <button class="brand-mark" data-action="home" aria-label="Moon Code home">
         <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 5h8v8H7zM17 5h8v8h-8zM7 15h8v12H7zM17 15h8v5h-8zM17 22h8v5h-8z"/></svg>
       </button>
       <nav class="rail-nav">
@@ -35,7 +35,7 @@
       <header class="sidebar-header">
         <button class="project-switcher" data-action="project-menu">
           <span class="project-symbol">Z</span>
-          <span class="project-copy"><strong id="project-name">Zetora</strong><small id="project-path">local workspace</small></span>
+          <span class="project-copy"><strong id="project-name">Moon Code</strong><small id="project-path">local workspace</small></span>
           <span data-icon="chevrons"></span>
         </button>
         <button class="icon-button" data-action="new-session" title="جلسة جديدة"><span data-icon="plus"></span></button>
@@ -51,7 +51,7 @@
         <section class="sidebar-section">
           <div class="section-heading"><span>الجلسات</span><button class="text-button" data-action="new-session">جديدة</button></div>
           <div id="session-list" class="session-list" aria-live="polite">
-            <button class="session-item is-active"><span class="session-state"></span><span><strong>البدء مع Zetora</strong><small>الآن · Build</small></span><span data-icon="more"></span></button>
+            <button class="session-item is-active"><span class="session-state"></span><span><strong>البدء مع Moon Code</strong><small>الآن · Build</small></span><span data-icon="more"></span></button>
           </div>
         </section>
         <section class="sidebar-section files-section">
@@ -71,7 +71,7 @@
         <div class="header-start">
           <button class="icon-button mobile-only" data-action="sidebar"><span data-icon="menu"></span></button>
           <div class="session-title-wrap">
-            <div class="title-line"><h1 id="session-title">البدء مع Zetora</h1><span class="local-badge">LOCAL</span></div>
+            <div class="title-line"><h1 id="session-title">البدء مع Moon Code</h1><span class="local-badge">LOCAL</span></div>
             <div class="session-meta"><span id="session-mode-label">Build</span><span>•</span><span id="session-model-label">Demo local</span><span id="usage-pill" class="usage-pill" hidden></span></div>
           </div>
         </div>
@@ -88,7 +88,7 @@
       <div id="timeline" class="timeline" aria-live="polite">
         <div class="hero-intro">
           <div class="hero-orbit"><span></span><svg viewBox="0 0 32 32"><path d="M7 5h8v8H7zM17 5h8v8h-8zM7 15h8v12H7zM17 15h8v5h-8zM17 22h8v5h-8z"/></svg></div>
-          <p class="eyebrow">ZETORA WORKSPACE</p>
+          <p class="eyebrow">MOONCODE WORKSPACE</p>
           <h2>ماذا سنبني اليوم؟</h2>
           <p>وكيل واحد للبرمجة والتصميم، يفهم مشروعك ويعرض كل خطوة قبل تنفيذها.</p>
           <div class="starter-grid">
@@ -107,7 +107,7 @@
           <button class="context-chip" data-action="design-mode"><span class="accent-dot"></span><span>Code + Design</span></button>
         </div>
         <div class="composer" id="composer">
-          <textarea id="prompt" rows="1" placeholder="اطلب من Zetora بناء شيء…" aria-label="الرسالة"></textarea>
+          <textarea id="prompt" rows="1" placeholder="اطلب من Moon Code بناء شيء…" aria-label="الرسالة"></textarea>
           <div class="composer-footer">
             <div class="composer-controls">
               <button class="select-button" data-action="mode-menu"><span class="mode-icon" data-icon="spark"></span><span id="mode-label">Build</span><span data-icon="chevron"></span></button>
@@ -177,15 +177,15 @@
         </section>
         <section class="inspector-view" data-view-panel="details">
           <div class="details-list">
-            <div><span>المشروع</span><strong>Zetora</strong></div><div><span>السياسة</span><strong>Approve changes</strong></div><div><span>التخزين</span><strong>Local JSON</strong></div><div><span>الواجهة</span><strong>Web / Desktop / TUI</strong></div>
+            <div><span>المشروع</span><strong>Moon Code</strong></div><div><span>السياسة</span><strong>Approve changes</strong></div><div><span>التخزين</span><strong>Local JSON</strong></div><div><span>الواجهة</span><strong>Web / Desktop / TUI</strong></div>
           </div>
         </section>
       </div>
     </aside>
 
     <section id="terminal-drawer" class="terminal-drawer" hidden>
-      <header><div><span class="terminal-dot"></span><strong>Terminal</strong><span class="terminal-cwd">~/zetora/workspace</span></div><button class="icon-button" data-action="terminal"><span data-icon="close"></span></button></header>
-      <div id="terminal-output" class="terminal-output"><div><span class="terminal-prompt">zetora ›</span> <span>طرفية محمية — الأوامر المعدّلة تتطلب موافقة.</span></div></div>
+      <header><div><span class="terminal-dot"></span><strong>Terminal</strong><span class="terminal-cwd">~/mooncode/workspace</span></div><button class="icon-button" data-action="terminal"><span data-icon="close"></span></button></header>
+      <div id="terminal-output" class="terminal-output"><div><span class="terminal-prompt">mooncode ›</span> <span>طرفية محمية — الأوامر المعدّلة تتطلب موافقة.</span></div></div>
       <form id="terminal-form"><span class="terminal-prompt">›</span><input id="terminal-input" autocomplete="off" placeholder="اكتب أمرًا مثل: git status"><kbd>Enter</kbd></form>
     </section>
   </div>
@@ -204,12 +204,12 @@
   </dialog>
 
   <dialog id="settings-dialog" class="settings-dialog">
-    <header><div><p class="eyebrow">SETTINGS</p><h2>إعدادات Zetora</h2></div><button class="icon-button" data-close-dialog="settings-dialog"><span data-icon="close"></span></button></header>
+    <header><div><p class="eyebrow">SETTINGS</p><h2>إعدادات Moon Code</h2></div><button class="icon-button" data-close-dialog="settings-dialog"><span data-icon="close"></span></button></header>
     <div class="settings-layout">
       <nav><button class="is-active">المزوّدون</button><button>الصلاحيات</button><button>المظهر</button><button>حول</button></nav>
       <section>
         <div class="setting-heading"><h3>مزوّد النموذج</h3><p>المفاتيح المُدخلة في الواجهة تُحفظ في جلسة المتصفح فقط. الأفضل استخدام متغيرات البيئة في تطبيق سطح المكتب.</p></div>
-        <label><span>Provider</span><select id="provider-select"><option value="demo">Zetora Demo</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="google">Google</option><option value="openrouter">OpenRouter</option><option value="ollama">Ollama</option><option value="custom">Custom (OpenAI compatible)</option></select></label>
+        <label><span>Provider</span><select id="provider-select"><option value="demo">Moon Code Demo</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="google">Google</option><option value="openrouter">OpenRouter</option><option value="ollama">Ollama</option><option value="custom">Custom (OpenAI compatible)</option></select></label>
         <label><span>Model</span><input id="settings-model" value="demo-local" spellcheck="false"></label>
         <label id="base-url-field" hidden><span>Base URL</span><input id="settings-base-url" placeholder="https://api.example.com/v1" spellcheck="false"></label>
         <label id="api-key-field" hidden><span>API key</span><input id="settings-api-key" type="password" placeholder="يُحفظ في الذاكرة فقط" autocomplete="off"></label>

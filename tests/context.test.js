@@ -8,12 +8,12 @@ import { Compactor } from "../packages/context/src/compactor.js";
 import { Workspace } from "../packages/tools/src/index.js";
 
 test("context files assemble into a single system-prompt prefix", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-ctx-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-ctx-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = new Workspace(root);
   await workspace.ensure();
   await workspace.write("CONVENTIONS.md", "# Conventions\n\nUse 2-space indent.\n");
-  const dataRoot = path.join(root, ".zetora");
+  const dataRoot = path.join(root, ".mooncode");
   const ctx = new ContextFiles(workspace, dataRoot);
   await ctx.add("CONVENTIONS.md", "coding standards");
   const assembled = await ctx.assemble();
@@ -23,13 +23,13 @@ test("context files assemble into a single system-prompt prefix", async (t) => {
 });
 
 test("context files skip missing files and prune the manifest", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-ctx-prune-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-ctx-prune-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = new Workspace(root);
   await workspace.ensure();
   await workspace.write("a.md", "alpha\n");
   await workspace.write("b.md", "beta\n");
-  const dataRoot = path.join(root, ".zetora");
+  const dataRoot = path.join(root, ".mooncode");
   const ctx = new ContextFiles(workspace, dataRoot);
   await ctx.add("a.md");
   await ctx.add("b.md");

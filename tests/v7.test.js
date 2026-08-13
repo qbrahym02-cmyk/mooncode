@@ -9,14 +9,14 @@ import { SearchIndex } from "../packages/search-index/src/index.js";
 import { TodoList } from "../packages/todos/src/index.js";
 
 test("plugin install + verify signature round-trip", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-plugin-verify-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-plugin-verify-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const reg = new PluginRegistry(root);
   const manifest = {
     name: "Test Plugin",
     version: "1.0.0",
     description: "A plugin that adds a code review skill",
-    author: "Zetora Team",
+    author: "Moon Code Team",
     capabilities: ["skills", "tools"],
     entry: "index.js",
     permissions: { tools: ["read_file", "parse_ast"], network: false, fs: ["src/**"] },
@@ -37,7 +37,7 @@ test("plugin install + verify signature round-trip", async (t) => {
 });
 
 test("plugin tamper detection: modified entry fails self-hash check", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-plugin-tamper-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-plugin-tamper-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const reg = new PluginRegistry(root);
   const manifest = { name: "Tamper", version: "1.0.0", entry: "index.js", capabilities: ["tools"] };
@@ -93,7 +93,7 @@ test("todo list progress edge cases", () => {
 });
 
 test("search index stats after indexing", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-sidx-stats-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-sidx-stats-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const idx = new SearchIndex(root);
   await writeFile(path.join(root, "a.js"), "function hello() {}\n");
@@ -104,7 +104,7 @@ test("search index stats after indexing", async (t) => {
 });
 
 test("search index handles empty query gracefully", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-sidx-empty-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-sidx-empty-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const idx = new SearchIndex(root);
   await writeFile(path.join(root, "a.js"), "const x = 1;\n");

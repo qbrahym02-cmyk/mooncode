@@ -1,6 +1,6 @@
-# المساهمة في Zetora
+# المساهمة في Moon Code
 
-شكرًا لاهتمامك بالمساهمة في Zetora! 🎉 هذا الدليل يشرح كيف تساهم بفعالية.
+شكرًا لاهتمامك بالمساهمة في Moon Code! 🎉 هذا الدليل يشرح كيف تساهم بفعالية.
 
 ## جدول المحتويات
 
@@ -27,11 +27,11 @@
 ```bash
 # 1. Fork المستودع على GitHub
 # 2. استنسخ fork الخاص بك
-git clone https://github.com/<your-username>/zetora.git
-cd zetora
+git clone https://github.com/<your-username>/mooncode.git
+cd mooncode
 
 # 3. أضف upstream للحفاظ على التزامن
-git remote add upstream https://github.com/qbrahym02-cmyk/zetora.git
+git remote add upstream https://github.com/qbrahym02-cmyk/mooncode.git
 
 # 4. انسخ ملف البيئة
 cp .env.example .env
@@ -166,11 +166,11 @@ node --test --test-reporter=spec tests/*.test.js
 
 1. **ابحث في Issues الموجودة** — قد يكون مُبلّغ عنه.
 2. **جرّب أحدث إصدار** — قد يكون مُصلحًا.
-3. **شغّل في وضع debug**: `ZETORA_LOG_LEVEL=debug npm run dev`.
+3. **شغّل في وضع debug**: `MOONCODE_LOG_LEVEL=debug npm run dev`.
 
 عند الإبلاغ، استخدم [قالب Bug Report](.github/ISSUE_TEMPLATE/bug_report.md) واذكر:
 
-- **إصدار Zetora** (`node scripts/ops.mjs env` يُظهره)
+- **إصدار Moon Code** (`node scripts/ops.mjs env` يُظهره)
 - **إصدار Node.js** (`node --version`)
 - **نظام التشغيل**
 - **خطوات الإعادة** بالتفصيل
@@ -196,4 +196,4 @@ node --test --test-reporter=spec tests/*.test.js
 
 ---
 
-شكرًا لمساهمتك في Zetora! 🚀
+شكرًا لمساهمتك في Moon Code! 🚀

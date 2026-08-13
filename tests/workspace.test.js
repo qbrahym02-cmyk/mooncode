@@ -6,7 +6,7 @@ import path from "node:path";
 import { Workspace } from "../packages/tools/src/index.js";
 
 test("workspace confines paths and supports original file operations", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-workspace-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-workspace-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = new Workspace(root);
   await workspace.ensure();
@@ -19,7 +19,7 @@ test("workspace confines paths and supports original file operations", async (t)
 });
 
 test("mutating commands do not execute without approval", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zetora-command-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "mooncode-command-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const result = await new Workspace(root).run("touch unsafe.txt");
   assert.equal(result.approvalRequired, true);

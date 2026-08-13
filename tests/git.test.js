@@ -6,7 +6,7 @@ import path from "node:path";
 import { Git } from "../packages/git/src/index.js";
 
 test("git init + checkpoint + undo round trip", async (t) => {
-  const root = mkdtempSync(path.join(os.tmpdir(), "zetora-git-"));
+  const root = mkdtempSync(path.join(os.tmpdir(), "mooncode-git-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const git = new Git(root);
   await git.init();
@@ -34,15 +34,15 @@ test("git init + checkpoint + undo round trip", async (t) => {
   assert.equal(bExists, false);
 });
 
-test("git refuses to undo a non-zetora commit", async (t) => {
-  const root = mkdtempSync(path.join(os.tmpdir(), "zetora-git-user-"));
+test("git refuses to undo a non-mooncode commit", async (t) => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "mooncode-git-user-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const git = new Git(root);
   await git.init();
   // Simulate a user-authored commit by overriding the message signature.
   writeFileSync(path.join(root, "user.txt"), "user\n");
   await git.checkpoint("user manual save");
-  // Patch the commit message so it no longer carries the zetora signature.
+  // Patch the commit message so it no longer carries the mooncode signature.
   // Use the raw git CLI via the same wrapper logic by checkpointing with a
   // message that includes our signature and then amending the message.
   // Simpler: checkpoint again, then undo should succeed; we already test the
@@ -52,7 +52,7 @@ test("git refuses to undo a non-zetora commit", async (t) => {
 });
 
 test("git log returns most-recent-first", async (t) => {
-  const root = mkdtempSync(path.join(os.tmpdir(), "zetora-git-log-"));
+  const root = mkdtempSync(path.join(os.tmpdir(), "mooncode-git-log-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const git = new Git(root);
   await git.init();

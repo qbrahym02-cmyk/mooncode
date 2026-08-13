@@ -1,6 +1,6 @@
-# تحليل Pi وOpen Design وOpenCode وخلاصة تصميم Zetora
+# تحليل Pi وOpen Design وOpenCode وخلاصة تصميم Moon Code
 
-تاريخ اللقطة: **12 أغسطس 2026** بتوقيت المستخدم. نُزّلت المستودعات كنسخ shallow مستقلة للبحث فقط، ولم تُضمَّن في بناء Zetora.
+تاريخ اللقطة: **12 أغسطس 2026** بتوقيت المستخدم. نُزّلت المستودعات كنسخ shallow مستقلة للبحث فقط، ولم تُضمَّن في بناء Moon Code.
 
 ## 1. نطاق الفحص
 
@@ -55,9 +55,9 @@ Pi هو **agent harness** قابل للتمديد الذاتي مع وكيل ب�
 - تجربة Pi الأساسية Terminal؛ لا تقدّم وحدها مساحة artifacts وتصميم ومراجعة بصرية.
 - catalogs الضخمة وتفاصيل auth الخاصة به لا ينبغي نسخها. الأفضل إنشاء واجهة مزود صغيرة مستقلة ثم توسيعها باختبارات توافق.
 
-### 2.5 الدرس لـZetora
+### 2.5 الدرس لـMoon Code
 
-نأخذ **الفكرة**: نواة events + provider-neutral + clients متعددة. لا نأخذ schemas أو أسماء الأحداث أو الشفرة. في Zetora أصبحت الأحداث `run.started`, `text.delta`, `tool.started`, `approval.required` وغيرها بتعريف مستقل.
+نأخذ **الفكرة**: نواة events + provider-neutral + clients متعددة. لا نأخذ schemas أو أسماء الأحداث أو الشفرة. في Moon Code أصبحت الأحداث `run.started`, `text.delta`, `tool.started`, `approval.required` وغيرها بتعريف مستقل.
 
 ---
 
@@ -109,7 +109,7 @@ Open Design مساحة تصميم **local-first** تربط code-agent بتدفق
 - Electron + daemon + Next + native modules + PTY + media exporters يرفع كلفة التوزيع والاختبار.
 - توليد HTML يحتاج CSP/sandbox وتنقية صارمة، لا iframe مفتوحًا.
 
-### 3.6 الدرس لـZetora
+### 3.6 الدرس لـMoon Code
 
 نأخذ **المفهوم**: Project → Run → Artifact Manifest → Isolated Preview → Export، وSkill/Plugin منفصل عن kernel. نبدأ بـHTML artifact ذاتي الاحتواء، ثم نضيف renderers ومصدر provenance. لا ننسخ أي skill أو template أو design system.
 
@@ -163,15 +163,15 @@ OpenCode منصة وكيل برمجة متعددة الواجهات: CLI/TUI، �
 - الحجم المعماري كبير؛ إعادة جميع الحزم من البداية ليست MVP بل برنامج تطوير متعدد المراحل.
 - توجد مرحلتان معماريتان متداخلتان في اللقطة (runtime أقدم ومسار Effect/schema أحدث)، فلا ينبغي نسخ التعقيد الانتقالي.
 
-### 4.6 الدرس لـZetora
+### 4.6 الدرس لـMoon Code
 
-نأخذ workflow: sessions + transparent tools + review + terminal + keyboard-first + multi-client. صممنا shell جديدًا بأربعة أعمدة مألوفة لكن بعلامة، palette، spacing، copy، artifact panel ونموذج مجال خاص بـZetora.
+نأخذ workflow: sessions + transparent tools + review + terminal + keyboard-first + multi-client. صممنا shell جديدًا بأربعة أعمدة مألوفة لكن بعلامة، palette، spacing، copy، artifact panel ونموذج مجال خاص بـMoon Code.
 
 ---
 
 ## 5. مقارنة مباشرة
 
-| القدرة | Pi | Open Design | OpenCode | قرار Zetora |
+| القدرة | Pi | Open Design | OpenCode | قرار Moon Code |
 |---|---|---|---|---|
 | Provider abstraction | ممتازة | تعتمد أيضًا على agents/model routes | واسعة | واجهة موحدة مستقلة تبدأ بـ6 أنواع |
 | Agent loop | جوهر المشروع | orchestrates design runs | جوهر البرمجة | حزمة `agent` مشتركة |
@@ -217,7 +217,7 @@ OpenCode منصة وكيل برمجة متعددة الواجهات: CLI/TUI، �
 - **Code + Design في session واحدة** بدل فصل منتجين.
 - inspector مخصص للـartifact وreview معًا.
 - سياسة مخاطر موحدة `observe/modify/execute/external/blocked`.
-- علامة Zetora وشكل مربعات غير تابع للمراجع.
+- علامة Moon Code وشكل مربعات غير تابع للمراجع.
 - دعم العربية/RTL من البداية.
 - لا تبعيات تشغيل خارجية للـWeb/TUI في الأساس الأول.
 
@@ -227,7 +227,7 @@ OpenCode منصة وكيل برمجة متعددة الواجهات: CLI/TUI، �
 
 ### ما يمكن أن يكون مملوكًا لصاحب المنتج
 
-- الشفرة الجديدة المكتوبة خصيصًا لـZetora، وفق شروط المنصة وعقد العمل المناسب.
+- الشفرة الجديدة المكتوبة خصيصًا لـMoon Code، وفق شروط المنصة وعقد العمل المناسب.
 - الاسم والشعار النهائيان بعد التحقق والتسجيل.
 - النصوص، تصميم النظام، schemas وملفات المشروع الأصلية.
 
@@ -250,7 +250,7 @@ OpenCode منصة وكيل برمجة متعددة الواجهات: CLI/TUI، �
 
 ---
 
-## 8. حالة Zetora الحالية بعد التحليل
+## 8. حالة Moon Code الحالية بعد التحليل
 
 منجَز فعليًا في المستودع الجديد:
 

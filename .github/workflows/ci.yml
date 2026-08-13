@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════════════════
-# Zetora CI — continuous integration for every push and pull request
+# Moon Code CI — continuous integration for every push and pull request
 # ════════════════════════════════════════════════════════════════════════════
 # Runs on: Node.js 20.12 and 22 (LTS)
 # Steps:  checkout → syntax check → tests → build Docker image
@@ -55,7 +55,7 @@ jobs:
         with:
           name: test-results-node-${{ matrix.node-version }}
           path: |
-            .zetora/audit.ndjson
+            .mooncode/audit.ndjson
           retention-days: 7
           if-no-files-found: ignore
 
@@ -121,24 +121,24 @@ jobs:
           file: docker/Dockerfile
           target: production
           push: false
-          tags: zetora:ci-${{ github.sha }}
+          tags: mooncode:ci-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           load: true
 
       - name: Verify image starts
         run: |
-          docker run --rm -d --name zetora-test -p 4173:4173 zetora:ci-${{ github.sha }}
+          docker run --rm -d --name mooncode-test -p 4173:4173 mooncode:ci-${{ github.sha }}
           sleep 5
           # Health check
           if curl -sf http://127.0.0.1:4173/api/health | grep -q "ok"; then
             echo "Server is healthy"
           else
             echo "::error::Server health check failed"
-            docker logs zetora-test
+            docker logs mooncode-test
             exit 1
           fi
-          docker stop zetora-test
+          docker stop mooncode-test
 
   # ─── Release (only on main, only on version tags) ───────────────────────
   release:
@@ -160,7 +160,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          name: Zetora v${{ steps.version.outputs.version }}
+          name: Moon Code v${{ steps.version.outputs.version }}
           body_path: docs/CHANGELOG.md
           draft: false
           prerelease: ${{ contains(steps.version.outputs.version, '-') }}

@@ -12,7 +12,7 @@ import { PtyRegistry } from "../packages/pty/src/index.js";
 const isMac = process.platform === "darwin";
 
 test("pty session persists cwd and env across commands", async (t) => {
-  const root = mkdtempSync(path.join(os.tmpdir(), "zetora-ptytest-"));
+  const root = mkdtempSync(path.join(os.tmpdir(), "mooncode-ptytest-"));
   const registry = new PtyRegistry();
   const session = await registry.create({ cwd: root, cols: 80, rows: 24 });
   t.after(async () => {

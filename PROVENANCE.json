@@ -1,5 +1,5 @@
 {
-  "product": "Zetora",
+  "product": "Moon Code",
   "version": "0.9.0",
   "generatedAt": "2026-08-13T15:23:51.628Z",
   "policy": "Independent first-party implementation; references are research-only and not build inputs.",
@@ -480,7 +480,7 @@
       "bytes": 699
     },
     {
-      "path": "workspace/.zetora-keep",
+      "path": "workspace/.mooncode-keep",
       "sha256": "2bb8bc85b4e6da5d2ec8bad24d6bd9be4b769ba393eadd96ccaa619df8b97954",
       "bytes": 26
     },

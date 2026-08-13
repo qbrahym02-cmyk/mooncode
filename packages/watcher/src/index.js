@@ -3,7 +3,7 @@ import { readdir, stat } from "node:fs/promises";
 import { EventEmitter } from "node:events";
 import path from "node:path";
 
-const SKIP = new Set([".git", "node_modules", ".next", "dist", "build", "out", "target", ".cache", ".zetora"]);
+const SKIP = new Set([".git", "node_modules", ".next", "dist", "build", "out", "target", ".cache", ".mooncode"]);
 const DEBOUNCE_MS = 120;
 
 /**
@@ -34,7 +34,7 @@ export class FileWatcher extends EventEmitter {
     catch (error) {
       // v0.9.1: ENOENT/EACCES are expected (dir vanished or permissions); log others.
       if (error?.code !== "ENOENT" && error?.code !== "EACCES") {
-        console.warn(`[zetora] watcher readdir(${dir}) failed: ${error.message}`);
+        console.warn(`[mooncode] watcher readdir(${dir}) failed: ${error.message}`);
       }
       return;
     }
@@ -51,7 +51,7 @@ export class FileWatcher extends EventEmitter {
       } catch (error) {
         // Directory may have vanished between readdir and watch; non-fatal.
         if (error?.code !== "ENOENT") {
-          console.warn(`[zetora] watcher watch(${dir}) failed: ${error.message}`);
+          console.warn(`[mooncode] watcher watch(${dir}) failed: ${error.message}`);
         }
       }
     }
@@ -88,7 +88,7 @@ export class FileWatcher extends EventEmitter {
     for (const watcher of this.watchers.values()) {
       try { watcher.close(); } catch (error) {
         // v0.9.1: log non-fatal close errors. Watchers may already be closed.
-        if (error?.code !== "ENOENT") console.warn(`[zetora] watcher close failed: ${error.message}`);
+        if (error?.code !== "ENOENT") console.warn(`[mooncode] watcher close failed: ${error.message}`);
       }
     }
     this.watchers.clear();

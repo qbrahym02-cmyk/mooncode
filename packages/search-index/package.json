@@ -1,5 +1,5 @@
 {
-  "name": "@zetora/search-index",
+  "name": "@mooncode/search-index",
   "version": "0.6.0",
   "private": true,
   "type": "module",

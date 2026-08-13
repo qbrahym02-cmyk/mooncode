@@ -9,7 +9,7 @@ import { CollabSession, CollabRegistry } from "../packages/collab/src/index.js";
 
 // === Fix #1: Git undo is soft by default + backup branch ===
 test("git undo defaults to soft (keeps changes staged)", async (t) => {
-  const root = mkdtempSync(path.join(os.tmpdir(), "zetora-undo-safe-"));
+  const root = mkdtempSync(path.join(os.tmpdir(), "mooncode-undo-safe-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const git = new Git(root);
   await git.init();
@@ -26,7 +26,7 @@ test("git undo defaults to soft (keeps changes staged)", async (t) => {
 });
 
 test("git undo hard requires explicit confirm", async (t) => {
-  const root = mkdtempSync(path.join(os.tmpdir(), "zetora-undo-hard-"));
+  const root = mkdtempSync(path.join(os.tmpdir(), "mooncode-undo-hard-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const git = new Git(root);
   await git.init();
@@ -46,14 +46,14 @@ test("git undo hard requires explicit confirm", async (t) => {
 });
 
 test("git undo creates a recovery backup branch", async (t) => {
-  const root = mkdtempSync(path.join(os.tmpdir(), "zetora-undo-backup-"));
+  const root = mkdtempSync(path.join(os.tmpdir(), "mooncode-undo-backup-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const git = new Git(root);
   await git.init();
   writeFileSync(path.join(root, "x.txt"), "1\n");
   await git.checkpoint("c1");
   const undo = await git.undo({ hard: true, confirm: true });
-  assert.ok(undo.backup.startsWith("zetora-undo-backup-"));
+  assert.ok(undo.backup.startsWith("mooncode-undo-backup-"));
   // The backup branch should appear in the branches list.
   const branches = await git.branches();
   assert.ok(branches.branches.some((b) => b.name === undo.backup), "backup branch should exist");

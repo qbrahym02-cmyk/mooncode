@@ -6,7 +6,7 @@ import path from "node:path";
 import { Git } from "../packages/git/src/index.js";
 
 test("git worktree add/list/remove", async (t) => {
-  const root = mkdtempSync(path.join(os.tmpdir(), "zetora-wt-"));
+  const root = mkdtempSync(path.join(os.tmpdir(), "mooncode-wt-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const git = new Git(root);
   await git.init();
@@ -25,7 +25,7 @@ test("git worktree add/list/remove", async (t) => {
 });
 
 test("git graph returns commits and edges", async (t) => {
-  const root = mkdtempSync(path.join(os.tmpdir(), "zetora-graph-"));
+  const root = mkdtempSync(path.join(os.tmpdir(), "mooncode-graph-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const git = new Git(root);
   await git.init();
