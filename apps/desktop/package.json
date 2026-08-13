@@ -1,0 +1,22 @@
+{
+  "name": "@zetora/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "package": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "studio.zetora.app",
+    "productName": "Zetora",
+    "files": ["src/**/*", "../../apps/web/public/**/*", "../../apps/server/src/**/*", "../../packages/**/*", "../../brand.json"],
+    "mac": { "target": ["dmg"] },
+    "win": { "target": ["nsis"] },
+    "linux": { "target": ["AppImage", "deb"] }
+  }
+}
