@@ -1,6 +1,6 @@
 {
   "name": "@zetora/desktop",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "private": true,
   "description": "Zetora desktop app — local-first agentic workspace",
   "main": "src/main.cjs",
