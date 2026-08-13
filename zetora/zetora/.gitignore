@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.zetora/*.json
+.zetora/*.tmp
+coverage/
+dist/
+out/
+.DS_Store
+*.log

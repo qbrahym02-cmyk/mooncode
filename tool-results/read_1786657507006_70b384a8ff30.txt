@@ -1,0 +1,552 @@
+     1→const PROVIDERS = Object.freeze({
+     2→  demo: { label: "Zetora Demo", defaultModel: "demo-local", env: null, kind: "demo" },
+     3→  openai: { label: "OpenAI", defaultModel: "gpt-5-mini", env: "OPENAI_API_KEY", baseUrl: "https://api.openai.com/v1", kind: "openai" },
+     4→  anthropic: { label: "Anthropic", defaultModel: "claude-sonnet-4-5", env: "ANTHROPIC_API_KEY", baseUrl: "https://api.anthropic.com/v1", kind: "anthropic" },
+     5→  google: { label: "Google", defaultModel: "gemini-2.5-flash", env: "GOOGLE_API_KEY", baseUrl: "https://generativelanguage.googleapis.com/v1beta", kind: "google" },
+     6→  openrouter: { label: "OpenRouter", defaultModel: "openai/gpt-5-mini", env: "OPENROUTER_API_KEY", baseUrl: "https://openrouter.ai/api/v1", kind: "openai" },
+     7→  ollama: { label: "Ollama", defaultModel: "qwen3-coder", env: null, baseUrl: "http://127.0.0.1:11434", kind: "ollama" },
+     8→  custom: { label: "Custom provider", defaultModel: "custom-model", env: "CUSTOM_API_KEY", kind: "openai" },
+     9→});
+    10→
+    11→/**
+    12→ * Rough per-1K-token cost in USD. Used only for live display, never for billing.
+    13→ * Missing entries default to zero so unknown models do not break the UI.
+    14→ */
+    15→const PRICE_TABLE_USD_PER_1K = {
+    16→  "gpt-5-mini": { input: 0.00015, output: 0.0006 },
+    17→  "gpt-5": { input: 0.005, output: 0.015 },
+    18→  "gpt-4.1-mini": { input: 0.0004, output: 0.0016 },
+    19→  "gpt-4.1": { input: 0.0025, output: 0.01 },
+    20→  "gpt-4o-mini": { input: 0.00015, output: 0.0006 },
+    21→  "gpt-4o": { input: 0.0025, output: 0.01 },
+    22→  "claude-sonnet-4-5": { input: 0.003, output: 0.015 },
+    23→  "claude-opus-4-1": { input: 0.015, output: 0.075 },
+    24→  "claude-haiku-4-5": { input: 0.001, output: 0.005 },
+    25→  "gemini-2.5-flash": { input: 0.00015, output: 0.0006 },
+    26→  "gemini-2.5-pro": { input: 0.00125, output: 0.005 },
+    27→};
+    28→
+    29→export class ProviderError extends Error {
+    30→  constructor(message, status = 500, detail = null) {
+    31→    super(message);
+    32→    this.name = "ProviderError";
+    33→    this.status = status;
+    34→    this.detail = detail;
+    35→  }
+    36→}
+    37→
+    38→export function providerCatalog(env = process.env) {
+    39→  return Object.entries(PROVIDERS).map(([id, provider]) => ({
+    40→    id,
+    41→    label: provider.label,
+    42→    defaultModel: provider.defaultModel,
+    43→    configured: id === "demo" || id === "ollama" || Boolean(provider.env && env[provider.env]) || (id === "custom" && Boolean(env.CUSTOM_BASE_URL)),
+    44→  }));
+    45→}
+    46→
+    47→export function estimateCost(model, usage) {
+    48→  if (!usage) return null;
+    49→  const inputTokens = Number(usage.inputTokens ?? usage.input_tokens ?? 0) || 0;
+    50→  const outputTokens = Number(usage.outputTokens ?? usage.output_tokens ?? 0) || 0;
+    51→  const price = PRICE_TABLE_USD_PER_1K[String(model).toLowerCase()];
+    52→  if (!price) return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUsd: null };
+    53→  const costUsd = (inputTokens * price.input + outputTokens * price.output) / 1000;
+    54→  return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUsd };
+    55→}
+    56→
+    57→function withTimeout(timeout = 120_000) {
+    58→  return AbortSignal.timeout(Math.min(Math.max(Number(timeout), 1_000), 300_000));
+    59→}
+    60→
+    61→async function jsonRequest(url, init) {
+    62→  const response = await fetch(url, { ...init, signal: init.signal ?? withTimeout() });
+    63→  const text = await response.text();
+    64→  let data;
+    65→  try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text.slice(0, 4_000) }; }
+    66→  if (!response.ok) {
+    67→    const message = data?.error?.message || data?.message || `Provider request failed (${response.status})`;
+    68→    throw new ProviderError(message, response.status, data);
+    69→  }
+    70→  return data;
+    71→}
+    72→
+    73→function openAITools(tools = []) {
+    74→  return tools.map((tool) => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } }));
+    75→}
+    76→
+    77→function normalizeOpenAI(data) {
+    78→  const message = data?.choices?.[0]?.message ?? {};
+    79→  return {
+    80→    text: message.content || "",
+    81→    stopReason: data?.choices?.[0]?.finish_reason || "stop",
+    82→    usage: data?.usage ?? null,
+    83→    toolCalls: (message.tool_calls ?? []).map((call) => {
+    84→      let input = {};
+    85→      try { input = JSON.parse(call.function?.arguments || "{}"); } catch { input = { _raw: call.function?.arguments }; }
+    86→      return { id: call.id || crypto.randomUUID(), name: call.function?.name, input };
+    87→    }),
+    88→  };
+    89→}
+    90→
+    91→/**
+    92→ * Convert the internal message format to OpenAI's multimodal content schema.
+    93→ * Internal messages can be either `{ role, content: string }` or
+    94→ * `{ role, content: [{ type: "text", text }, { type: "image_url", image_url: { url } }] }`.
+    95→ * String content passes through unchanged.
+    96→ */
+    97→function toOpenAIMessages(messages = []) {
+    98→  return messages.map((message) => {
+    99→    if (typeof message.content === "string") return message;
+   100→    if (Array.isArray(message.content)) {
+   101→      return { ...message, content: message.content.map((part) => {
+   102→        if (part.type === "text") return { type: "text", text: part.text };
+   103→        if (part.type === "image_url") return { type: "image_url", image_url: { url: part.image_url?.url ?? part.url } };
+   104→        return part;
+   105→      }) };
+   106→    }
+   107→    return message;
+   108→  });
+   109→}
+   110→
+   111→function toAnthropicMessages(messages = []) {
+   112→  return messages.map((message) => {
+   113→    if (typeof message.content === "string") {
+   114→      return { ...message, content: typeof message.content === "string" ? message.content : JSON.stringify(message.content) };
+   115→    }
+   116→    if (Array.isArray(message.content)) {
+   117→      const parts = message.content.map((part) => {
+   118→        if (part.type === "text") return { type: "text", text: part.text };
+   119→        if (part.type === "image_url") {
+   120→          const url = part.image_url?.url ?? part.url ?? "";
+   121→          // Anthropic expects base64-encoded image data with explicit source.
+   122→          const match = url.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+   123→          if (match) {
+   124→            return { type: "image", source: { type: "base64", media_type: match[1], data: match[2] } };
+   125→          }
+   126→          return { type: "text", text: `(image: ${url.slice(0, 80)})` };
+   127→        }
+   128→        return part;
+   129→      });
+   130→      return { ...message, content: parts };
+   131→    }
+   132→    return message;
+   133→  });
+   134→}
+   135→
+   136→function toGoogleMessages(messages = []) {
+   137→  return messages.map((message) => {
+   138→    if (typeof message.content === "string") {
+   139→      return { role: message.role === "assistant" ? "model" : "user", parts: [{ text: message.content }] };
+   140→    }
+   141→    if (Array.isArray(message.content)) {
+   142→      const parts = message.content.map((part) => {
+   143→        if (part.type === "text") return { text: part.text };
+   144→        if (part.type === "image_url") {
+   145→          const url = part.image_url?.url ?? part.url ?? "";
+   146→          const match = url.match(/^data:(image\/(png|jpeg|webp|gif));base64,(.+)$/);
+   147→          if (match) {
+   148→            return { inlineData: { mimeType: match[1], data: match[3] } };
+   149→          }
+   150→          return { text: `(image: ${url.slice(0, 80)})` };
+   151→        }
+   152→        return { text: JSON.stringify(part) };
+   153→      });
+   154→      return { role: message.role === "assistant" ? "model" : "user", parts };
+   155→    }
+   156→    return { role: message.role === "assistant" ? "model" : "user", parts: [{ text: String(message.content ?? "") }] };
+   157→  });
+   158→}
+   159→
+   160→async function callOpenAI(config, request) {
+   161→  const baseUrl = String(config.baseUrl).replace(/\/$/, "");
+   162→  const body = {
+   163→    model: config.model,
+   164→    messages: toOpenAIMessages(request.messages),
+   165→    temperature: request.temperature ?? 0.2,
+   166→    stream: Boolean(request.stream),
+   167→    ...(request.tools?.length ? { tools: openAITools(request.tools), tool_choice: "auto" } : {}),
+   168→  };
+   169→  if (!request.stream) {
+   170→    const data = await jsonRequest(`${baseUrl}/chat/completions`, {
+   171→      method: "POST",
+   172→      headers: {
+   173→        "content-type": "application/json",
+   174→        ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
+   175→        ...(config.headers ?? {}),
+   176→      },
+   177→      body: JSON.stringify(body),
+   178→    });
+   179→    return normalizeOpenAI(data);
+   180→  }
+   181→  // SSE streaming path
+   182→  const response = await fetch(`${baseUrl}/chat/completions`, {
+   183→    method: "POST",
+   184→    headers: {
+   185→      "content-type": "application/json",
+   186→      accept: "text/event-stream",
+   187→      ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
+   188→      ...(config.headers ?? {}),
+   189→    },
+   190→    body: JSON.stringify(body),
+   191→    signal: request.signal ?? withTimeout(),
+   192→  });
+   193→  if (!response.ok) {
+   194→    const text = await response.text();
+   195→    let detail = null;
+   196→    try { detail = JSON.parse(text); } catch { detail = { raw: text.slice(0, 4_000) }; }
+   197→    throw new ProviderError(detail?.error?.message || `Provider request failed (${response.status})`, response.status, detail);
+   198→  }
+   199→  const reader = response.body.getReader();
+   200→  const decoder = new TextDecoder();
+   201→  let buffer = "";
+   202→  let usage = null;
+   203→  let stopReason = null;
+   204→  const toolCalls = new Map();
+   205→  let textBuffer = "";
+   206→  const ensureToolCall = (id, name) => {
+   207→    if (!toolCalls.has(id)) toolCalls.set(id, { id, name, arguments: "" });
+   208→    return toolCalls.get(id);
+   209→  };
+   210→  while (true) {
+   211→    const { value, done } = await reader.read();
+   212→    if (done) break;
+   213→    buffer += decoder.decode(value || new Uint8Array(), { stream: true });
+   214→    const lines = buffer.split("\n");
+   215→    buffer = lines.pop() || "";
+   216→    for (const line of lines) {
+   217→      const trimmed = line.trim();
+   218→      if (!trimmed.startsWith("data:")) continue;
+   219→      const payload = trimmed.slice(5).trim();
+   220→      if (payload === "[DONE]") continue;
+   221→      let event;
+   222→      try { event = JSON.parse(payload); } catch { continue; }
+   223→      if (event.usage) usage = { inputTokens: event.usage.prompt_tokens, outputTokens: event.usage.completion_tokens };
+   224→      const choice = event.choices?.[0];
+   225→      if (!choice) continue;
+   226→      if (choice.finish_reason) stopReason = choice.finish_reason;
+   227→      const delta = choice.delta ?? {};
+   228→      if (delta.content) {
+   229→        textBuffer += delta.content;
+   230→        request.onDelta?.(delta.content);
+   231→      }
+   232→      if (Array.isArray(delta.tool_calls)) {
+   233→        for (const partial of delta.tool_calls) {
+   234→          const id = partial.id ?? `call_${toolCalls.size}`;
+   235→          const entry = ensureToolCall(id, partial.function?.name);
+   236→          if (partial.function?.name && !entry.name) entry.name = partial.function.name;
+   237→          if (partial.function?.arguments) entry.arguments += partial.function.arguments;
+   238→        }
+   239→      }
+   240→    }
+   241→  }
+   242→  const assembled = [...toolCalls.values()].map((entry) => {
+   243→    let input = {};
+   244→    try { input = JSON.parse(entry.arguments || "{}"); } catch { input = { _raw: entry.arguments }; }
+   245→    return { id: entry.id, name: entry.name, input };
+   246→  });
+   247→  return { text: textBuffer, stopReason: stopReason || "stop", usage, toolCalls: assembled };
+   248→}
+   249→
+   250→async function callAnthropic(config, request) {
+   251→  const system = request.messages.filter((m) => m.role === "system").map((m) => typeof m.content === "string" ? m.content : (m.content?.filter((p) => p.type === "text").map((p) => p.text).join("\n") ?? "")).join("\n\n");
+   252→  const messages = toAnthropicMessages(request.messages.filter((m) => m.role !== "system"));
+   253→  const body = {
+   254→    model: config.model,
+   255→    max_tokens: request.maxTokens ?? 8_192,
+   256→    system,
+   257→    messages,
+   258→    stream: Boolean(request.stream),
+   259→    ...(request.tools?.length ? { tools: request.tools.map((tool) => ({ name: tool.name, description: tool.description, input_schema: tool.inputSchema })) } : {}),
+   260→  };
+   261→  if (!request.stream) {
+   262→    const data = await jsonRequest(`${String(config.baseUrl).replace(/\/$/, "")}/messages`, {
+   263→      method: "POST",
+   264→      headers: { "content-type": "application/json", "x-api-key": config.apiKey, "anthropic-version": "2023-06-01" },
+   265→      body: JSON.stringify(body),
+   266→    });
+   267→    return {
+   268→      text: (data.content ?? []).filter((part) => part.type === "text").map((part) => part.text).join("\n"),
+   269→      toolCalls: (data.content ?? []).filter((part) => part.type === "tool_use").map((part) => ({ id: part.id, name: part.name, input: part.input ?? {} })),
+   270→      stopReason: data.stop_reason,
+   271→      usage: data.usage ? { inputTokens: data.usage.input_tokens, outputTokens: data.usage.output_tokens } : null,
+   272→    };
+   273→  }
+   274→  // SSE streaming path
+   275→  const response = await fetch(`${String(config.baseUrl).replace(/\/$/, "")}/messages`, {
+   276→    method: "POST",
+   277→    headers: { "content-type": "application/json", "x-api-key": config.apiKey, "anthropic-version": "2023-06-01", accept: "text/event-stream" },
+   278→    body: JSON.stringify(body),
+   279→    signal: request.signal ?? withTimeout(),
+   280→  });
+   281→  if (!response.ok) {
+   282→    const text = await response.text();
+   283→    let detail = null;
+   284→    try { detail = JSON.parse(text); } catch { detail = { raw: text.slice(0, 4_000) }; }
+   285→    throw new ProviderError(detail?.error?.message || `Provider request failed (${response.status})`, response.status, detail);
+   286→  }
+   287→  const reader = response.body.getReader();
+   288→  const decoder = new TextDecoder();
+   289→  let buffer = "";
+   290→  let textBuffer = "";
+   291→  let usage = null;
+   292→  let stopReason = null;
+   293→  const toolCalls = new Map();
+   294→  while (true) {
+   295→    const { value, done } = await reader.read();
+   296→    if (done) break;
+   297→    buffer += decoder.decode(value || new Uint8Array(), { stream: true });
+   298→    const events = buffer.split("\n\n");
+   299→    buffer = events.pop() || "";
+   300→    for (const block of events) {
+   301→      const lines = block.split("\n");
+   302→      const dataLine = lines.find((line) => line.startsWith("data:"));
+   303→      const eventLine = lines.find((line) => line.startsWith("event:"));
+   304→      if (!dataLine) continue;
+   305→      const eventType = eventLine ? eventLine.slice(6).trim() : "message";
+   306→      let payload;
+   307→      try { payload = JSON.parse(dataLine.slice(5).trim()); } catch { continue; }
+   308→      if (payload.type) {
+   309→        // Anthropic sends `type` inside data
+   310→        if (payload.type === "content_block_delta" && payload.delta?.text) {
+   311→          textBuffer += payload.delta.text;
+   312→          request.onDelta?.(payload.delta.text);
+   313→        } else if (payload.type === "content_block_start" && payload.content_block?.type === "tool_use") {
+   314→          toolCalls.set(payload.index, { id: payload.content_block.id, name: payload.content_block.name, arguments: "" });
+   315→        } else if (payload.type === "content_block_delta" && payload.delta?.type === "input_json_delta") {
+   316→          const entry = toolCalls.get(payload.index);
+   317→          if (entry) entry.arguments += payload.delta.partial_json;
+   318→        } else if (payload.type === "message_delta") {
+   319→          if (payload.delta?.stop_reason) stopReason = payload.delta.stop_reason;
+   320→          if (payload.usage) usage = { inputTokens: usage?.inputTokens ?? 0, outputTokens: payload.usage.output_tokens ?? usage?.outputTokens ?? 0 };
+   321→        } else if (payload.type === "message_start" && payload.message?.usage) {
+   322→          usage = { inputTokens: payload.message.usage.input_tokens, outputTokens: payload.message.usage.output_tokens };
+   323→        }
+   324→      } else if (eventType === "message_stop") {
+   325→        // No-op
+   326→      }
+   327→    }
+   328→  }
+   329→  const assembled = [...toolCalls.values()].map((entry) => {
+   330→    let input = {};
+   331→    try { input = JSON.parse(entry.arguments || "{}"); } catch { input = { _raw: entry.arguments }; }
+   332→    return { id: entry.id, name: entry.name, input };
+   333→  });
+   334→  return { text: textBuffer, stopReason: stopReason || "stop", usage, toolCalls: assembled };
+   335→}
+   336→
+   337→async function callGoogle(config, request) {
+   338→  const system = request.messages.filter((m) => m.role === "system").map((m) => typeof m.content === "string" ? m.content : (m.content?.filter((p) => p.type === "text").map((p) => p.text).join("\n") ?? "")).join("\n\n");
+   339→  const contents = toGoogleMessages(request.messages.filter((m) => m.role !== "system"));
+   340→  const body = {
+   341→    systemInstruction: system ? { parts: [{ text: system }] } : undefined,
+   342→    contents,
+   343→    generationConfig: { temperature: request.temperature ?? 0.2, maxOutputTokens: request.maxTokens ?? 8_192 },
+   344→    ...(request.tools?.length ? { tools: [{ functionDeclarations: request.tools.map((tool) => ({ name: tool.name, description: tool.description, parameters: tool.inputSchema })) }] } : {}),
+   345→  };
+   346→  const base = String(config.baseUrl).replace(/\/$/, "");
+   347→  if (!request.stream) {
+   348→    const url = `${base}/models/${encodeURIComponent(config.model)}:generateContent?key=${encodeURIComponent(config.apiKey)}`;
+   349→    const data = await jsonRequest(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+   350→    const parts = data?.candidates?.[0]?.content?.parts ?? [];
+   351→    return {
+   352→      text: parts.filter((part) => part.text).map((part) => part.text).join("\n"),
+   353→      toolCalls: parts.filter((part) => part.functionCall).map((part) => ({ id: crypto.randomUUID(), name: part.functionCall.name, input: part.functionCall.args ?? {} })),
+   354→      stopReason: data?.candidates?.[0]?.finishReason,
+   355→      usage: data.usageMetadata ? { inputTokens: data.usageMetadata.promptTokenCount, outputTokens: data.usageMetadata.candidatesTokenCount } : null,
+   356→    };
+   357→  }
+   358→  // SSE streaming path (Google streamGenerateContent with alt=sse)
+   359→  const url = `${base}/models/${encodeURIComponent(config.model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(config.apiKey)}`;
+   360→  const response = await fetch(url, {
+   361→    method: "POST",
+   362→    headers: { "content-type": "application/json", accept: "text/event-stream" },
+   363→    body: JSON.stringify(body),
+   364→    signal: request.signal ?? withTimeout(),
+   365→  });
+   366→  if (!response.ok) {
+   367→    const text = await response.text();
+   368→    let detail = null;
+   369→    try { detail = JSON.parse(text); } catch { detail = { raw: text.slice(0, 4_000) }; }
+   370→    throw new ProviderError(detail?.error?.message || `Provider request failed (${response.status})`, response.status, detail);
+   371→  }
+   372→  const reader = response.body.getReader();
+   373→  const decoder = new TextDecoder();
+   374→  let buffer = "";
+   375→  let textBuffer = "";
+   376→  let usage = null;
+   377→  let stopReason = null;
+   378→  const toolCalls = [];
+   379→  while (true) {
+   380→    const { value, done } = await reader.read();
+   381→    if (done) break;
+   382→    buffer += decoder.decode(value || new Uint8Array(), { stream: true });
+   383→    const lines = buffer.split("\n");
+   384→    buffer = lines.pop() || "";
+   385→    for (const line of lines) {
+   386→      const trimmed = line.trim();
+   387→      if (!trimmed.startsWith("data:")) continue;
+   388→      const payload = trimmed.slice(5).trim();
+   389→      if (!payload || payload === "[DONE]") continue;
+   390→      let event;
+   391→      try { event = JSON.parse(payload); } catch { continue; }
+   392→      const parts = event?.candidates?.[0]?.content?.parts ?? [];
+   393→      for (const part of parts) {
+   394→        if (part.text) {
+   395→          textBuffer += part.text;
+   396→          request.onDelta?.(part.text);
+   397→        }
+   398→        if (part.functionCall) toolCalls.push({ id: crypto.randomUUID(), name: part.functionCall.name, input: part.functionCall.args ?? {} });
+   399→      }
+   400→      if (event?.candidates?.[0]?.finishReason) stopReason = event.candidates[0].finishReason;
+   401→      if (event?.usageMetadata) usage = { inputTokens: event.usageMetadata.promptTokenCount, outputTokens: event.usageMetadata.candidatesTokenCount };
+   402→    }
+   403→  }
+   404→  return { text: textBuffer, stopReason: stopReason || "stop", usage, toolCalls: toolCalls };
+   405→}
+   406→
+   407→async function callOllama(config, request) {
+   408→  const base = String(config.baseUrl).replace(/\/$/, "");
+   409→  if (!request.stream) {
+   410→    const data = await jsonRequest(`${base}/api/chat`, {
+   411→      method: "POST",
+   412→      headers: { "content-type": "application/json" },
+   413→      body: JSON.stringify({ model: config.model, stream: false, messages: request.messages, tools: request.tools?.map((tool) => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } })) }),
+   414→    });
+   415→    return {
+   416→      text: data?.message?.content || "",
+   417→      toolCalls: (data?.message?.tool_calls ?? []).map((call) => ({ id: crypto.randomUUID(), name: call.function?.name, input: call.function?.arguments ?? {} })),
+   418→      stopReason: data.done_reason ?? "stop",
+   419→      usage: { inputTokens: data.prompt_eval_count, outputTokens: data.eval_count },
+   420→    };
+   421→  }
+   422→  // NDJSON streaming path
+   423→  const response = await fetch(`${base}/api/chat`, {
+   424→    method: "POST",
+   425→    headers: { "content-type": "application/json" },
+   426→    body: JSON.stringify({ model: config.model, stream: true, messages: request.messages, tools: request.tools?.map((tool) => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } })) }),
+   427→    signal: request.signal ?? withTimeout(),
+   428→  });
+   429→  if (!response.ok) {
+   430→    const text = await response.text();
+   431→    throw new ProviderError(`Ollama request failed (${response.status})`, response.status, { raw: text.slice(0, 4_000) });
+   432→  }
+   433→  const reader = response.body.getReader();
+   434→  const decoder = new TextDecoder();
+   435→  let buffer = "";
+   436→  let textBuffer = "";
+   437→  let usage = null;
+   438→  let stopReason = null;
+   439→  const toolCalls = [];
+   440→  while (true) {
+   441→    const { value, done } = await reader.read();
+   442→    if (done) break;
+   443→    buffer += decoder.decode(value || new Uint8Array(), { stream: true });
+   444→    const lines = buffer.split("\n");
+   445→    buffer = lines.pop() || "";
+   446→    for (const line of lines) {
+   447→      if (!line.trim()) continue;
+   448→      let event;
+   449→      try { event = JSON.parse(line); } catch { continue; }
+   450→      if (event.message?.content) {
+   451→        textBuffer += event.message.content;
+   452→        request.onDelta?.(event.message.content);
+   453→      }
+   454→      if (Array.isArray(event.message?.tool_calls)) {
+   455→        for (const call of event.message.tool_calls) toolCalls.push({ id: crypto.randomUUID(), name: call.function?.name, input: call.function?.arguments ?? {} });
+   456→      }
+   457→      if (event.done) {
+   458→        stopReason = event.done_reason ?? "stop";
+   459→        usage = { inputTokens: event.prompt_eval_count, outputTokens: event.eval_count };
+   460→      }
+   461→    }
+   462→  }
+   463→  return { text: textBuffer, stopReason: stopReason || "stop", usage, toolCalls: toolCalls };
+   464→}
+   465→
+   466→function demo(request) {
+   467→  const prompt = request.messages.at(-1)?.content || "";
+   468→  const promptText = typeof prompt === "string" ? prompt : (Array.isArray(prompt) ? prompt.find((p) => p.type === "text")?.text || "" : "");
+   469→  const arabic = /[\u0600-\u06ff]/.test(promptText);
+   470→
+   471→  // Context-aware demo responses: simulate real agent behavior based on intent.
+   472→  let text = "";
+   473→  let toolCalls = [];
+   474→
+   475→  if (/تحليل|analyze|بنية|structure/i.test(promptText)) {
+   476→    // Intent: project analysis — simulate list_files + parse_ast calls.
+   477→    toolCalls = [
+   478→      { id: crypto.randomUUID(), name: "list_files", input: { path: ".", maxDepth: 3 } },
+   479→      { id: crypto.randomUUID(), name: "parse_ast", input: { path: "src/index.js" } },
+   480→    ];
+   481→    text = arabic
+   482→      ? "سأحلّل بنية المشروع. دعني أولًا أستعرض الملفات ثم أفحص بنية الكود.\n\n**الخطوات المخططة:**\n1. عرض شجرة الملفات\n2. تحليل الـAST لكل ملف JS\n3. تقديم ملخص بالبنية والمخاطر"
+   483→      : "I'll analyze the project structure. First, let me list the files and then examine the AST.\n\n**Planned steps:**\n1. List file tree\n2. Parse AST for each JS file\n3. Summarize structure and risks";
+   484→  } else if (/أصلح|fix|lint|eslint|أخطاء|errors/i.test(promptText)) {
+   485→    // Intent: auto-fix — simulate auto_fix tool call.
+   486→    toolCalls = [
+   487→      { id: crypto.randomUUID(), name: "auto_fix", input: { path: ".", dryRun: true } },
+   488→    ];
+   489→    text = arabic
+   490→      ? "سأفحص المشروع بحثًا عن مشاكل قابلة للإصلاح التلقائي. سأبدأ بـ dry run لعرض التغييرات المقترحة قبل التطبيق.\n\n**الإصلاحات الممكنة:**\n- trailing newlines\n- tabs → spaces\n- JSON pretty-printing"
+   491→      : "I'll scan the project for auto-fixable issues. Starting with a dry run to preview changes before applying.\n\n**Possible fixes:**\n- Trailing newlines\n- Tabs → spaces\n- JSON pretty-printing";
+   492→  } else if (/صمّم|design|artifact|واجهة|landing/i.test(promptText)) {
+   493→    // Intent: design — simulate write_file for an HTML artifact.
+   494→    toolCalls = [
+   495→      { id: crypto.randomUUID(), name: "write_file", input: { path: "designs/generated.html", content: "<!-- generated artifact -->" } },
+   496→    ];
+   497→    text = arabic
+   498→      ? "سأصمّم واجهة أصلية متجاوبة كـ HTML artifact. سأنشئ ملفًا ذاتي الاحتواء مع CSS inline ودعم RTL.\n\n**المواصفات:**\n- متجاوب من 360px إلى 1440px\n- دعم RTL والعربية\n- لا أصول خارجية"
+   499→      : "I'll design a responsive native interface as an HTML artifact. Creating a self-contained file with inline CSS and RTL support.\n\n**Specs:**\n- Responsive 360px–1440px\n- RTL and Arabic support\n- No external assets";
+   500→  } else if (/ابحث|search|grep|find|بحث/i.test(promptText)) {
+   501→    // Intent: search — simulate grep tool call.
+   502→    toolCalls = [
+   503→      { id: crypto.randomUUID(), name: "grep", input: { pattern: "function", glob: "*.js", contextBefore: 1, contextAfter: 1 } },
+   504→    ];
+   505→    text = arabic
+   506→      ? "سأبحث في المشروع باستخدام grep متقدم مع context lines. سأعرض النتائج مرتبة حسب الصلة."
+   507→      : "I'll search the project using advanced grep with context lines. Results will be ranked by relevance.";
+   508→  } else {
+   509→    // Default: general response explaining capabilities.
+   510→    text = arabic
+   511→      ? "أنا أعمل الآن في الوضع التجريبي المحلي. ربط مزوّد من الإعدادات يفعّل التنفيذ الحقيقي.\n\n**ما يمكنني فعله في demo mode:**\n- تحليل بنية المشروع (اكتب: «حلّل المشروع»)\n- اقتراح إصلاحات (اكتب: «أصلح الأخطاء»)\n- تصميم artifacts (اكتب: «صمّم واجهة»)\n- البحث في الكود (اكتب: «ابحث عن ...»)\n\nجرّب أحد هذه الأوامر لأرى محاكاة استدعاءات الأدوات!"
+   512→      : "I'm running in local demo mode. Connect a provider in Settings for live execution.\n\n**What I can do in demo mode:**\n- Analyze project structure (type: \"analyze project\")\n- Suggest fixes (type: \"fix errors\")\n- Design artifacts (type: \"design a landing page\")\n- Search code (type: \"search for ...\")\n\nTry one of these commands to see simulated tool calls!";
+   513→  }
+   514→
+   515→  // Simulate streaming in demo mode so the UI exercises the same path as live providers.
+   516→  if (request.stream && request.onDelta) {
+   517→    const words = text.split(/(\s+)/);
+   518→    return new Promise((resolve) => {
+   519→      let index = 0;
+   520→      const tick = () => {
+   521→        if (index >= words.length) {
+   522→          return resolve({ text, toolCalls, stopReason: "stop", usage: { inputTokens: 12, outputTokens: Math.ceil(text.length / 4) } });
+   523→        }
+   524→        const chunk = words.slice(index, index + 2).join("");
+   525→        index += 2;
+   526→        request.onDelta(chunk);
+   527→        setTimeout(tick, 18);
+   528→      };
+   529→      tick();
+   530→    });
+   531→  }
+   532→  return Promise.resolve({ text, toolCalls, stopReason: "stop", usage: { inputTokens: 12, outputTokens: Math.ceil(text.length / 4) } });
+   533→}
+   534→
+   535→export async function callModel(options, request, env = process.env) {
+   536→  const preset = PROVIDERS[options.provider] ?? PROVIDERS.custom;
+   537→  const config = {
+   538→    ...preset,
+   539→    model: options.model || preset.defaultModel,
+   540→    baseUrl: options.baseUrl || (options.provider === "custom" ? env.CUSTOM_BASE_URL : preset.baseUrl),
+   541→    apiKey: options.apiKey || (preset.env ? env[preset.env] : undefined),
+   542→    headers: options.headers,
+   543→  };
+   544→  if (preset.kind === "demo") return demo(request);
+   545→  if (!config.baseUrl) throw new ProviderError("Provider base URL is required", 400);
+   546→  if (preset.kind !== "ollama" && options.provider !== "custom" && !config.apiKey) throw new ProviderError(`API key is not configured for ${preset.label}`, 400);
+   547→  if (preset.kind === "anthropic") return callAnthropic(config, request);
+   548→  if (preset.kind === "google") return callGoogle(config, request);
+   549→  if (preset.kind === "ollama") return callOllama(config, request);
+   550→  return callOpenAI(config, request);
+   551→}
+   552→

@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0c0d10">
+  <meta name="description" content="Zetora — local-first agentic workspace for code and design">
+  <title>Zetora</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+  <div id="app" class="app-shell" data-inspector="true" data-sidebar="true">
+    <aside class="activity-rail" aria-label="التنقل الرئيسي">
+      <button class="brand-mark" data-action="home" aria-label="Zetora home">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 5h8v8H7zM17 5h8v8h-8zM7 15h8v12H7zM17 15h8v5h-8zM17 22h8v5h-8z"/></svg>
+      </button>
+      <nav class="rail-nav">
+        <button class="rail-button is-active" data-view="workspace" title="مساحة العمل" aria-label="مساحة العمل"><span data-icon="spark"></span></button>
+        <button class="rail-button" data-view="search" title="البحث" aria-label="البحث"><span data-icon="search"></span></button>
+        <button class="rail-button" data-view="design" title="التصميم" aria-label="التصميم"><span data-icon="layers"></span></button>
+        <button class="rail-button" data-action="resources" title="الموارد" aria-label="الموارد"><span data-icon="command"></span></button>
+        <button class="rail-button" data-action="terminal" title="الطرفية" aria-label="الطرفية"><span data-icon="terminal"></span></button>
+      </nav>
+      <div class="rail-bottom">
+        <button class="rail-button" data-action="command" title="لوحة الأوامر"><span data-icon="command"></span></button>
+        <button class="rail-button" data-action="settings" title="الإعدادات"><span data-icon="settings"></span></button>
+        <button class="avatar" title="الملف المحلي">Z</button>
+      </div>
+    </aside>
+
+    <aside class="project-sidebar">
+      <header class="sidebar-header">
+        <button class="project-switcher" data-action="project-menu">
+          <span class="project-symbol">Z</span>
+          <span class="project-copy"><strong id="project-name">Zetora</strong><small id="project-path">local workspace</small></span>
+          <span data-icon="chevrons"></span>
+        </button>
+        <button class="icon-button" data-action="new-session" title="جلسة جديدة"><span data-icon="plus"></span></button>
+      </header>
+
+      <div class="sidebar-search-wrap">
+        <button class="sidebar-search" data-action="search">
+          <span data-icon="search"></span><span>ابحث في الجلسات</span><kbd>⌘ K</kbd>
+        </button>
+      </div>
+
+      <div class="sidebar-scroll">
+        <section class="sidebar-section">
+          <div class="section-heading"><span>الجلسات</span><button class="text-button" data-action="new-session">جديدة</button></div>
+          <div id="session-list" class="session-list" aria-live="polite">
+            <button class="session-item is-active"><span class="session-state"></span><span><strong>البدء مع Zetora</strong><small>الآن · Build</small></span><span data-icon="more"></span></button>
+          </div>
+        </section>
+        <section class="sidebar-section files-section">
+          <div class="section-heading"><span>ملفات المشروع</span><button class="tiny-icon" data-action="refresh-files" title="تحديث"><span data-icon="refresh"></span></button></div>
+          <div id="file-tree" class="file-tree"><div class="skeleton-line"></div><div class="skeleton-line short"></div><div class="skeleton-line"></div></div>
+        </section>
+      </div>
+
+      <footer class="sidebar-footer">
+        <div class="sync-state"><span class="pulse-dot"></span><span>محلي وآمن</span></div>
+        <span id="app-version">v0.1.0</span>
+      </footer>
+    </aside>
+
+    <main class="workspace-main">
+      <header class="workspace-header">
+        <div class="header-start">
+          <button class="icon-button mobile-only" data-action="sidebar"><span data-icon="menu"></span></button>
+          <div class="session-title-wrap">
+            <div class="title-line"><h1 id="session-title">البدء مع Zetora</h1><span class="local-badge">LOCAL</span></div>
+            <div class="session-meta"><span id="session-mode-label">Build</span><span>•</span><span id="session-model-label">Demo local</span><span id="usage-pill" class="usage-pill" hidden></span></div>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="header-button" data-action="compact" title="ضغط السجل"><span data-icon="layers"></span><span>Compact</span></button>
+          <button class="header-button" data-action="resources" title="الموارد والإضافات"><span data-icon="command"></span><span>الموارد</span></button>
+          <button class="header-button" data-action="git-undo" title="تراجع عن آخر checkpoint"><span data-icon="refresh"></span><span>Undo</span></button>
+          <button class="header-button" data-action="share"><span data-icon="share"></span><span>تصدير</span></button>
+          <button class="icon-button" data-action="toggle-inspector" title="لوحة المراجعة"><span data-icon="panel"></span></button>
+          <button class="icon-button" data-action="session-menu" title="المزيد"><span data-icon="more"></span></button>
+        </div>
+      </header>
+
+      <div id="timeline" class="timeline" aria-live="polite">
+        <div class="hero-intro">
+          <div class="hero-orbit"><span></span><svg viewBox="0 0 32 32"><path d="M7 5h8v8H7zM17 5h8v8h-8zM7 15h8v12H7zM17 15h8v5h-8zM17 22h8v5h-8z"/></svg></div>
+          <p class="eyebrow">ZETORA WORKSPACE</p>
+          <h2>ماذا سنبني اليوم؟</h2>
+          <p>وكيل واحد للبرمجة والتصميم، يفهم مشروعك ويعرض كل خطوة قبل تنفيذها.</p>
+          <div class="starter-grid">
+            <button data-starter="حلّل بنية المشروع ثم اقترح خطة تحسين عملية"><span data-icon="scan"></span><span><strong>تحليل المشروع</strong><small>خريطة بنية ومخاطر وخطة</small></span></button>
+            <button data-starter="صمّم واجهة أصلية متجاوبة لهذا المشروع وأنشئها كـ artifact"><span data-icon="layers"></span><span><strong>إنشاء تصميم</strong><small>واجهة ومعاينة قابلة للتعديل</small></span></button>
+            <button data-starter="ابحث عن الأخطاء المحتملة وشغّل الاختبارات الآمنة"><span data-icon="bug"></span><span><strong>فحص الجودة</strong><small>أخطاء واختبارات وإصلاحات</small></span></button>
+          </div>
+        </div>
+      </div>
+
+      <div id="approval-dock" class="approval-dock" hidden></div>
+
+      <section class="composer-zone" aria-label="محرر الرسالة">
+        <div class="context-row" id="context-row">
+          <button class="context-chip" data-action="attach"><span data-icon="file"></span><span>أضف سياقًا</span></button>
+          <button class="context-chip" data-action="design-mode"><span class="accent-dot"></span><span>Code + Design</span></button>
+        </div>
+        <div class="composer" id="composer">
+          <textarea id="prompt" rows="1" placeholder="اطلب من Zetora بناء شيء…" aria-label="الرسالة"></textarea>
+          <div class="composer-footer">
+            <div class="composer-controls">
+              <button class="select-button" data-action="mode-menu"><span class="mode-icon" data-icon="spark"></span><span id="mode-label">Build</span><span data-icon="chevron"></span></button>
+              <button class="select-button" data-action="model-menu"><span id="model-label">Demo local</span><span data-icon="chevron"></span></button>
+              <button class="tool-button" data-action="voice" title="إدخال صوتي"><span data-icon="command"></span></button>
+              <button class="tool-button" data-action="attach" title="إرفاق صورة"><span data-icon="paperclip"></span></button>
+            </div>
+            <div class="composer-submit">
+              <span class="shortcut-hint">Enter للإرسال · Shift+Enter لسطر</span>
+              <button id="send-button" class="send-button" data-action="send" aria-label="إرسال"><span data-icon="arrow-up"></span></button>
+            </div>
+          </div>
+        </div>
+        <div class="composer-status"><span><i class="status-light"></i> لا تُنفّذ التعديلات دون موافقتك</span><span id="token-status">0 ملفات في السياق</span></div>
+      </section>
+    </main>
+
+    <aside class="inspector-panel">
+      <header class="inspector-header">
+        <div class="inspector-tabs" role="tablist">
+          <button class="is-active" data-inspector-tab="preview">المعاينة</button>
+          <button data-inspector-tab="changes">التغييرات <span class="tab-count">0</span></button>
+          <button data-inspector-tab="todos">المهام <span class="tab-count" id="todo-count">0</span></button>
+          <button data-inspector-tab="graph">الرسم</button>
+          <button data-inspector-tab="details">التفاصيل</button>
+        </div>
+        <button class="icon-button" data-action="close-inspector"><span data-icon="close"></span></button>
+      </header>
+      <div class="inspector-content">
+        <section class="inspector-view is-active" data-view-panel="preview">
+          <div class="preview-toolbar">
+            <div class="device-switcher"><button class="is-active" title="سطح المكتب"><span data-icon="desktop"></span></button><button title="هاتف"><span data-icon="phone"></span></button></div>
+            <div class="preview-actions"><button title="تحديث" data-action="refresh-preview"><span data-icon="refresh"></span></button><button title="فتح"><span data-icon="external"></span></button></div>
+          </div>
+          <div class="artifact-stage">
+            <div class="artifact-empty" id="artifact-empty">
+              <div class="empty-glyph"><span data-icon="layers"></span></div>
+              <h3>ستظهر أعمالك هنا</h3>
+              <p>ملفات HTML والصور والمخططات وواجهات التصميم تُعرض في مساحة آمنة.</p>
+              <button data-starter="أنشئ لوحة معلومات أصلية كـ HTML artifact مع بيانات تجريبية">أنشئ أول artifact</button>
+            </div>
+            <iframe id="artifact-frame" title="Artifact preview" sandbox="allow-scripts allow-pointer-lock" referrerpolicy="no-referrer" hidden></iframe>
+          </div>
+          <div class="artifact-list">
+            <div class="section-heading"><span>Artifacts</span><button class="tiny-icon"><span data-icon="plus"></span></button></div>
+            <button class="artifact-row is-active" data-path="designs/welcome.html"><span class="artifact-icon">H</span><span><strong>Welcome canvas</strong><small>designs/welcome.html</small></span><span class="ready-dot"></span></button>
+          </div>
+        </section>
+        <section class="inspector-view" data-view-panel="changes">
+          <div class="empty-state"><span data-icon="diff"></span><h3>لا توجد تغييرات</h3><p>سيظهر diff واضح لكل ملف قبل اعتماده.</p></div>
+        </section>
+        <section class="inspector-view" data-view-panel="todos">
+          <div class="todos-panel">
+            <div class="todos-header">
+              <h3>مهام الجلسة</h3>
+              <span id="todo-progress" class="todo-progress">0%</span>
+            </div>
+            <form id="todo-add-form" class="todo-add-form"><input id="todo-input" placeholder="أضف مهمة..." autocomplete="off"><button type="submit" class="primary-button">إضافة</button></form>
+            <div id="todo-list" class="todo-list"><div class="empty-state"><p>لا توجد مهام بعد. الوكيل سيضيف مهام تلقائيًا، أو أضفها يدويًا.</p></div></div>
+          </div>
+        </section>
+        <section class="inspector-view" data-view-panel="graph">
+          <div class="graph-panel">
+            <div class="graph-toolbar"><button class="secondary-button" data-action="refresh-graph">تحديث الرسم</button></div>
+            <div id="git-graph" class="git-graph"><div class="empty-state"><p>اضغط «تحديث الرسم» لعرض الفروع والـcommits.</p></div></div>
+          </div>
+        </section>
+        <section class="inspector-view" data-view-panel="details">
+          <div class="details-list">
+            <div><span>المشروع</span><strong>Zetora</strong></div><div><span>السياسة</span><strong>Approve changes</strong></div><div><span>التخزين</span><strong>Local JSON</strong></div><div><span>الواجهة</span><strong>Web / Desktop / TUI</strong></div>
+          </div>
+        </section>
+      </div>
+    </aside>
+
+    <section id="terminal-drawer" class="terminal-drawer" hidden>
+      <header><div><span class="terminal-dot"></span><strong>Terminal</strong><span class="terminal-cwd">~/zetora/workspace</span></div><button class="icon-button" data-action="terminal"><span data-icon="close"></span></button></header>
+      <div id="terminal-output" class="terminal-output"><div><span class="terminal-prompt">zetora ›</span> <span>طرفية محمية — الأوامر المعدّلة تتطلب موافقة.</span></div></div>
+      <form id="terminal-form"><span class="terminal-prompt">›</span><input id="terminal-input" autocomplete="off" placeholder="اكتب أمرًا مثل: git status"><kbd>Enter</kbd></form>
+    </section>
+  </div>
+
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
+
+  <dialog id="command-dialog" class="command-dialog">
+    <div class="dialog-search"><span data-icon="search"></span><input id="command-input" placeholder="اكتب أمرًا أو ابحث…" autocomplete="off"><kbd>esc</kbd></div>
+    <div class="command-list">
+      <p>إجراءات سريعة</p>
+      <button data-command-action="new-session"><span data-icon="plus"></span><span><strong>جلسة جديدة</strong><small>ابدأ مهمة مستقلة</small></span><kbd>⌘ N</kbd></button>
+      <button data-command-action="toggle-inspector"><span data-icon="panel"></span><span><strong>تبديل لوحة المراجعة</strong><small>Preview, changes, details</small></span><kbd>⌘ .</kbd></button>
+      <button data-command-action="terminal"><span data-icon="terminal"></span><span><strong>فتح الطرفية</strong><small>أوامر محمية بالموافقة</small></span><kbd>⌘ J</kbd></button>
+      <button data-command-action="settings"><span data-icon="settings"></span><span><strong>إعدادات المزوّدين</strong><small>نماذج سحابية ومحلية ومخصصة</small></span><kbd>⌘ ,</kbd></button>
+    </div>
+  </dialog>
+
+  <dialog id="settings-dialog" class="settings-dialog">
+    <header><div><p class="eyebrow">SETTINGS</p><h2>إعدادات Zetora</h2></div><button class="icon-button" data-close-dialog="settings-dialog"><span data-icon="close"></span></button></header>
+    <div class="settings-layout">
+      <nav><button class="is-active">المزوّدون</button><button>الصلاحيات</button><button>المظهر</button><button>حول</button></nav>
+      <section>
+        <div class="setting-heading"><h3>مزوّد النموذج</h3><p>المفاتيح المُدخلة في الواجهة تُحفظ في جلسة المتصفح فقط. الأفضل استخدام متغيرات البيئة في تطبيق سطح المكتب.</p></div>
+        <label><span>Provider</span><select id="provider-select"><option value="demo">Zetora Demo</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="google">Google</option><option value="openrouter">OpenRouter</option><option value="ollama">Ollama</option><option value="custom">Custom (OpenAI compatible)</option></select></label>
+        <label><span>Model</span><input id="settings-model" value="demo-local" spellcheck="false"></label>
+        <label id="base-url-field" hidden><span>Base URL</span><input id="settings-base-url" placeholder="https://api.example.com/v1" spellcheck="false"></label>
+        <label id="api-key-field" hidden><span>API key</span><input id="settings-api-key" type="password" placeholder="يُحفظ في الذاكرة فقط" autocomplete="off"></label>
+        <div class="setting-actions"><button class="secondary-button" data-action="test-provider">اختبار الاتصال</button><button class="primary-button" data-action="save-settings">حفظ</button></div>
+        <div id="provider-status" class="provider-status"></div>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog id="resources-dialog" class="settings-dialog resources-dialog">
+    <header><div><p class="eyebrow">RESOURCES</p><h2>الموارد والإضافات</h2></div><button class="icon-button" data-close-dialog="resources-dialog"><span data-icon="close"></span></button></header>
+    <div class="settings-layout">
+      <nav>
+        <button class="is-active" data-resources-tab="context">ملفات السياق</button>
+        <button data-resources-tab="skills">المهارات</button>
+        <button data-resources-tab="mcp">خوادم MCP</button>
+        <button data-resources-tab="design">Design tokens</button>
+      </nav>
+      <section>
+        <div class="setting-heading">
+          <h3>ملفات السياق الدائمة</h3>
+          <p>تُضاف هذه الملفات إلى system prompt في كل استدعاء نموذج. مثالي لمعايير الترميز وتعليمات المشروع.</p>
+        </div>
+        <div id="context-list" class="context-list"></div>
+        <form id="context-add-form" class="context-add-form">
+          <input id="context-path-input" placeholder="مسار ملف مثل CONVENTIONS.md" spellcheck="false">
+          <input id="context-desc-input" placeholder="وصف قصير (اختياري)" spellcheck="false">
+          <button type="submit" class="primary-button">إضافة</button>
+        </form>
+      </section>
+    </div>
+  </dialog>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

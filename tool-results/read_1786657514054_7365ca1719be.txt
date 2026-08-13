@@ -1,0 +1,1172 @@
+     1→import http from "node:http";
+     2→import { readFile, stat, writeFile, mkdir } from "node:fs/promises";
+     3→import path from "node:path";
+     4→import { fileURLToPath } from "node:url";
+     5→import { AgentRunner } from "../../../packages/agent/src/index.js";
+     6→import { providerCatalog, callModel } from "../../../packages/providers/src/index.js";
+     7→import { JsonStore } from "../../../packages/storage/src/index.js";
+     8→import { Workspace } from "../../../packages/tools/src/index.js";
+     9→import { Git } from "../../../packages/git/src/index.js";
+    10→import { PtyRegistry } from "../../../packages/pty/src/index.js";
+    11→import { FileWatcher } from "../../../packages/watcher/src/index.js";
+    12→import { renderArtifact, detectKind } from "../../../packages/artifacts/src/index.js";
+    13→import { ContextFiles, Compactor } from "../../../packages/context/src/index.js";
+    14→import { McpRegistry } from "../../../packages/mcp/src/index.js";
+    15→import { SkillRegistry, BUILTIN_SKILLS } from "../../../packages/skills/src/index.js";
+    16→import { DesignTokens } from "../../../packages/design/src/index.js";
+    17→import { AutoFix, diagnoseError } from "../../../packages/autofix/src/index.js";
+    18→import { SearchIndex } from "../../../packages/search-index/src/index.js";
+    19→import { TodoList } from "../../../packages/todos/src/index.js";
+    20→import { LspDiagnostics } from "../../../packages/lsp/src/index.js";
+    21→import { PluginRegistry } from "../../../packages/plugins/src/index.js";
+    22→import { CollabRegistry, CollabSession } from "../../../packages/collab/src/index.js";
+    23→import { PluginSigner, TrustRegistry } from "../../../packages/security/src/index.js";
+    24→import { AuditLog } from "../../../packages/security/src/audit.js";
+    25→import { RateLimiter, applyRateLimit } from "../../../packages/security/src/rate-limit.js";
+    26→import { redactSecrets } from "../../../packages/security/src/secrets.js";
+    27→
+    28→const here = path.dirname(fileURLToPath(import.meta.url));
+    29→const root = path.resolve(here, "../../..");
+    30→const publicDir = path.join(root, "apps/web/public");
+    31→const workspaceRoot = path.resolve(root, process.env.ZETORA_WORKSPACE || "workspace");
+    32→const dataRoot = path.resolve(root, process.env.ZETORA_DATA || ".zetora");
+    33→const uploadsRoot = path.join(dataRoot, "uploads");
+    34→// SECURITY (v0.9): bind to localhost by default. Binding to 0.0.0.0 exposes
+    35→// the agent's file/write/command tools to anyone on the network. Users who
+    36→// explicitly want remote access must set ZETORA_HOST=0.0.0.0 AND acknowledge
+    37→// the risk via ZETORA_ALLOW_REMOTE=1.
+    38→const requestedHost = process.env.ZETORA_HOST || "127.0.0.1";
+    39→const allowRemote = process.env.ZETORA_ALLOW_REMOTE === "1";
+    40→const host = (requestedHost === "0.0.0.0" && !allowRemote) ? "127.0.0.1" : requestedHost;
+    41→const port = Number(process.env.ZETORA_PORT || 4173);
+    42→const workspace = new Workspace(workspaceRoot);
+    43→const git = new Git(workspaceRoot);
+    44→const ptyRegistry = new PtyRegistry();
+    45→const contextFiles = new ContextFiles(workspace, dataRoot);
+    46→const compactor = new Compactor({ threshold: 30, keepRecent: 8 });
+    47→const mcpRegistry = new McpRegistry(dataRoot, workspaceRoot);
+    48→const skills = new SkillRegistry(workspaceRoot);
+    49→const designTokens = new DesignTokens(workspaceRoot);
+    50→const autoFix = new AutoFix(workspaceRoot);
+    51→const searchIndex = new SearchIndex(workspaceRoot);
+    52→const todoList = new TodoList();
+    53→const lsp = new LspDiagnostics(workspaceRoot);
+    54→const pluginRegistry = new PluginRegistry(dataRoot);
+    55→const collabRegistry = new CollabRegistry();
+    56→// SECURITY (v0.9): cryptographic plugin signing + trust registry + audit log + rate limiter.
+    57→const pluginSigner = new PluginSigner(dataRoot);
+    58→const trustRegistry = new TrustRegistry(dataRoot);
+    59→const auditLog = new AuditLog(dataRoot);
+    60→const rateLimiter = new RateLimiter({ windowMs: 60_000, max: 200 });
+    61→// Wire the signer + trust registry into the plugin registry.
+    62→pluginRegistry.signer = pluginSigner;
+    63→pluginRegistry.trustRegistry = trustRegistry;
+    64→const stateStore = new JsonStore(path.join(dataRoot, "state.json"), {
+    65→  product: { name: "Zetora", nameArabic: "زيتورا", version: "0.7.0" },
+    66→  projects: [{ id: "zetora-self", name: "Zetora", path: workspaceRoot, kind: "code-design", createdAt: new Date().toISOString() }],
+    67→  sessions: [{ id: "welcome", title: "البدء مع Zetora", updatedAt: new Date().toISOString(), mode: "build", messages: [], events: [], usage: null }],
+    68→  approvals: [],
+    69→  runs: [],
+    70→});
+    71→
+    72→await workspace.ensure();
+    73→await mkdir(uploadsRoot, { recursive: true });
+    74→await contextFiles.ensure();
+    75→
+    76→// File watcher: emits SSE updates on /api/events to all connected clients.
+    77→const watcher = new FileWatcher(workspaceRoot);
+    78→const watcherClients = new Set();
+    79→watcher.on("change", (event) => {
+    80→  const payload = JSON.stringify({ type: "file.changed", ...event });
+    81→  for (const client of watcherClients) {
+    82→    try { client.write(`data: ${payload}\n\n`); } catch {}
+    83→  }
+    84→});
+    85→watcher.start().catch((error) => console.error("[zetora] watcher failed:", error.message));
+    86→
+    87→// Best-effort MCP server reconnection on startup. Failures are non-fatal.
+    88→mcpRegistry.connectAll().catch((error) => console.error("[zetora] mcp init:", error.message));
+    89→
+    90→// Approvals store API for the runner.
+    91→const approvalStoreApi = {
+    92→  async __call(approval) {
+    93→    await stateStore.update((state) => {
+    94→      state.approvals = [approval, ...(state.approvals ?? [])].slice(0, 200);
+    95→      return state;
+    96→    });
+    97→  },
+    98→  async readAll() { return stateStore.read(); },
+    99→  async resolve(id, status, result) {
+   100→    await stateStore.update((next) => {
+   101→      const item = (next.approvals ?? []).find((entry) => entry.id === id);
+   102→      if (item) {
+   103→        item.status = status;
+   104→        item.resolvedAt = new Date().toISOString();
+   105→        item.result = result;
+   106→      }
+   107→      return next;
+   108→    });
+   109→  },
+   110→};
+   111→
+   112→const runner = new AgentRunner({
+   113→  workspace,
+   114→  approvalStore: approvalStoreApi,
+   115→  eventStore: stateStore,
+   116→  git,
+   117→  contextFiles,
+   118→  compactor,
+   119→  mcpRegistry,
+   120→  skills,
+   121→  designTokens,
+   122→  autoFix,
+   123→  searchIndex,
+   124→  todoList,
+   125→});
+   126→
+   127→const mime = {
+   128→  ".html": "text/html; charset=utf-8",
+   129→  ".js": "text/javascript; charset=utf-8",
+   130→  ".css": "text/css; charset=utf-8",
+   131→  ".json": "application/json; charset=utf-8",
+   132→  ".svg": "image/svg+xml",
+   133→  ".png": "image/png",
+   134→  ".jpg": "image/jpeg",
+   135→  ".jpeg": "image/jpeg",
+   136→  ".gif": "image/gif",
+   137→  ".webp": "image/webp",
+   138→  ".woff2": "font/woff2",
+   139→};
+   140→
+   141→function json(response, status, value, headers = {}) {
+   142→  const body = JSON.stringify(value);
+   143→  response.writeHead(status, { "content-type": "application/json; charset=utf-8", "content-length": Buffer.byteLength(body), "cache-control": "no-store", ...headers });
+   144→  response.end(body);
+   145→}
+   146→
+   147→async function body(request, maxBytes = 5_000_000) {
+   148→  const chunks = [];
+   149→  let size = 0;
+   150→  for await (const chunk of request) {
+   151→    size += chunk.length;
+   152→    if (size > maxBytes) throw Object.assign(new Error("Request body is too large"), { status: 413 });
+   153→    chunks.push(chunk);
+   154→  }
+   155→  if (!chunks.length) return {};
+   156→  try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
+   157→  catch { throw Object.assign(new Error("Body must be valid JSON"), { status: 400 }); }
+   158→}
+   159→
+   160→function publicPath(pathname) {
+   161→  const requested = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
+   162→  const target = path.resolve(publicDir, requested);
+   163→  if (target !== publicDir && !target.startsWith(`${publicDir}${path.sep}`)) return null;
+   164→  return target;
+   165→}
+   166→
+   167→async function serveStatic(request, response, pathname) {
+   168→  let target = publicPath(pathname);
+   169→  if (!target) return false;
+   170→  try {
+   171→    let info = await stat(target);
+   172→    if (info.isDirectory()) target = path.join(target, "index.html");
+   173→    info = await stat(target);
+   174→    const extension = path.extname(target).toLowerCase();
+   175→    const content = await readFile(target);
+   176→    response.writeHead(200, {
+   177→      "content-type": mime[extension] || "application/octet-stream",
+   178→      "content-length": content.length,
+   179→      "cache-control": extension === ".html" ? "no-store" : "public, max-age=3600",
+   180→      "x-content-type-options": "nosniff",
+   181→      "content-security-policy": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'",
+   182→    });
+   183→    response.end(content);
+   184→    return true;
+   185→  } catch (error) {
+   186→    if (error?.code !== "ENOENT") throw error;
+   187→    return false;
+   188→  }
+   189→}
+   190→
+   191→async function persistSessionEvent(sessionId, event) {
+   192→  await stateStore.update((state) => {
+   193→    let session = (state.sessions ?? []).find((item) => item.id === sessionId);
+   194→    if (!session) {
+   195→      session = { id: sessionId, title: `Session ${sessionId.slice(0, 6)}`, updatedAt: new Date().toISOString(), mode: "build", messages: [], events: [], usage: null };
+   196→      state.sessions.unshift(session);
+   197→    }
+   198→    session.events = [...(session.events ?? []), event].slice(-500);
+   199→    session.updatedAt = new Date().toISOString();
+   200→    if (event.type === "usage" && event.cost) session.usage = event.cost;
+   201→    return state;
+   202→  });
+   203→}
+   204→
+   205→async function recordMessage(sessionId, role, content) {
+   206→  await stateStore.update((state) => {
+   207→    let session = (state.sessions ?? []).find((item) => item.id === sessionId);
+   208→    if (!session) {
+   209→      session = { id: sessionId, title: role === "user" ? String(content).slice(0, 56) : `Session ${sessionId.slice(0, 6)}`, updatedAt: new Date().toISOString(), mode: "build", messages: [], events: [], usage: null };
+   210→      state.sessions.unshift(session);
+   211→    }
+   212→    session.messages = [...(session.messages ?? []), { role, content, at: new Date().toISOString() }].slice(-100);
+   213→    session.updatedAt = new Date().toISOString();
+   214→    if (role === "user" && (!session.title || session.title === "البدء مع Zetora")) {
+   215→      const preview = typeof content === "string" ? content : (Array.isArray(content) ? content.find((p) => p.type === "text")?.text ?? "Image session" : "Session");
+   216→      session.title = String(preview).slice(0, 56) || session.title;
+   217→    }
+   218→    return state;
+   219→  });
+   220→}
+   221→
+   222→async function api(request, response, url) {
+   223→  const method = request.method || "GET";
+   224→  const pathname = url.pathname;
+   225→
+   226→  if (method === "GET" && pathname === "/api/health") {
+   227→    return json(response, 200, {
+   228→      ok: true,
+   229→      service: "zetora",
+   230→      version: "0.9.0",
+   231→      workspace: workspaceRoot,
+   232→      isDemoWorkspace: workspaceRoot === path.resolve(root, "workspace"),
+   233→    });
+   234→  }
+   235→
+   236→  // Workspace switch API: lets the user point Zetora at a different directory
+   237→  // without restarting the server. Validated against path traversal.
+   238→  if (method === "POST" && pathname === "/api/workspace") {
+   239→    const input = await body(request);
+   240→    const targetPath = path.resolve(String(input.path || ""));
+   241→    try {
+   242→      const info = await stat(targetPath);
+   243→      if (!info.isDirectory()) return json(response, 400, { error: "Path is not a directory" });
+   244→      // Reinitialize workspace-bound services.
+   245→      workspace.root = targetPath;
+   246→      git.root = targetPath;
+   247→      searchIndex.root = targetPath;
+   248→      lsp.root = targetPath;
+   249→      autoFix.root = targetPath;
+   250→      designTokens.root = targetPath;
+   251→      skills.root = targetPath;
+   252→      await workspace.ensure();
+   253→      await auditLog.record({ action: "workspace.switch", from: workspaceRoot, to: targetPath });
+   254→      return json(response, 200, { ok: true, workspace: targetPath, message: "Workspace switched. Refresh the browser to see the new files." });
+   255→    } catch (error) {
+   256→      return json(response, 400, { error: `Cannot access path: ${error.message}` });
+   257→    }
+   258→  }
+   259→
+   260→  if (method === "GET" && pathname === "/api/bootstrap") {
+   261→    const state = await stateStore.read();
+   262→    const files = await workspace.tree(".", { maxDepth: 4, maxEntries: 600 });
+   263→    const gitStatus = await git.status().catch(() => ({ repository: false }));
+   264→    const skillList = await skills.list().catch(() => []);
+   265→    const tokens = await designTokens.read().catch(() => null);
+   266→    const ctxManifest = await contextFiles.readManifest().catch(() => ({ files: [] }));
+   267→    return json(response, 200, {
+   268→      product: { name: "Zetora", nameArabic: "زيتورا", version: "0.7.0" },
+   269→      project: state.projects?.[0],
+   270→      sessions: state.sessions ?? [],
+   271→      approvals: (state.approvals ?? []).filter((item) => item.status === "pending"),
+   272→      providers: providerCatalog(),
+   273→      files,
+   274→      git: gitStatus,
+   275→      capabilities: { web: true, desktop: true, tui: true, artifacts: true, terminal: true, localFirst: true, streaming: true, resume: true, diff: true, git: true, pty: true, multimodal: true, watcher: true, mcp: true, skills: true, designTokens: true, contextFiles: true, compaction: true, autoFix: true, grep: true, fetchUrl: true, runTests: true, parseAst: true, subagents: true, diagnose: true, worktrees: true, gitGraph: true, searchIndex: true, todos: true, lsp: true, plugins: true, collab: true, voice: true, markdownEditor: true, codeEditor: true, pwa: true, cryptographicSigning: true, auditLog: true, rateLimiting: true, secretRedaction: true, trustRegistry: true },
+   276→      artifactExtensions: ["html", "htm", "svg", "png", "jpg", "jpeg", "gif", "webp", "avif", "md", "markdown", "json", "jsonc", "txt", "log", "js", "mjs", "cjs", "ts", "tsx", "jsx", "css", "scss", "py", "go", "rs", "java", "kt", "swift", "c", "h", "cpp", "hpp", "sh", "sql", "yml", "yaml", "toml", "xml", "env"],
+   277→      skills: skillList,
+   278→      builtinSkills: BUILTIN_SKILLS,
+   279→      designTokens: tokens,
+   280→      contextFiles: ctxManifest.files,
+   281→      mcpServers: [...mcpRegistry.clients.values()].map((client) => ({ id: client.id, closed: client.closed, serverInfo: client.serverInfo })),
+   282→    });
+   283→  }
+   284→
+   285→  if (method === "GET" && pathname === "/api/tree") {
+   286→    return json(response, 200, await workspace.tree(url.searchParams.get("path") || ".", {
+   287→      maxDepth: url.searchParams.get("depth") || 6,
+   288→      maxEntries: 2000,
+   289→    }));
+   290→  }
+   291→
+   292→  if (method === "GET" && pathname === "/api/file") {
+   293→    return json(response, 200, await workspace.read(url.searchParams.get("path") || ""));
+   294→  }
+   295→
+   296→  if (method === "PUT" && pathname === "/api/file") {
+   297→    if (request.headers["x-zetora-confirm"] !== "write") return json(response, 428, { error: "Explicit write confirmation header is required" });
+   298→    const input = await body(request, 5_000_000);
+   299→    const result = await workspace.write(input.path, input.content);
+   300→    await git.checkpoint(`zetora: write ${input.path}`).catch(() => {});
+   301→    await auditLog.record({ action: "file.write", path: input.path, bytes: result.bytes });
+   302→    return json(response, 200, result);
+   303→  }
+   304→
+   305→  if (method === "GET" && pathname === "/api/search") {
+   306→    return json(response, 200, await workspace.search(url.searchParams.get("q") || "", { regex: url.searchParams.get("regex") === "true" }));
+   307→  }
+   308→
+   309→  // Sessions API
+   310→  const sessionMatch = pathname.match(/^\/api\/sessions(?:\/([^/]+))?$/);
+   311→  if (sessionMatch) {
+   312→    if (method === "GET" && !sessionMatch[1]) {
+   313→      const state = await stateStore.read();
+   314→      return json(response, 200, (state.sessions ?? []).map((session) => ({
+   315→        id: session.id, title: session.title, mode: session.mode, updatedAt: session.updatedAt,
+   316→        messageCount: (session.messages ?? []).length, usage: session.usage ?? null,
+   317→      })));
+   318→    }
+   319→    if (method === "POST" && !sessionMatch[1]) {
+   320→      const input = await body(request);
+   321→      const id = input.id || crypto.randomUUID();
+   322→      await stateStore.update((state) => {
+   323→        if ((state.sessions ?? []).some((item) => item.id === id)) return state;
+   324→        state.sessions.unshift({
+   325→          id, title: input.title || `جلسة جديدة ${id.slice(0, 4)}`, mode: input.mode || "build",
+   326→          updatedAt: new Date().toISOString(), messages: [], events: [], usage: null,
+   327→        });
+   328→        return state;
+   329→      });
+   330→      return json(response, 201, { id });
+   331→    }
+   332→    if (method === "GET" && sessionMatch[1]) {
+   333→      const state = await stateStore.read();
+   334→      const session = (state.sessions ?? []).find((item) => item.id === sessionMatch[1]);
+   335→      if (!session) return json(response, 404, { error: "Session not found" });
+   336→      return json(response, 200, session);
+   337→    }
+   338→    if (method === "DELETE" && sessionMatch[1]) {
+   339→      await stateStore.update((state) => {
+   340→        state.sessions = (state.sessions ?? []).filter((item) => item.id !== sessionMatch[1]);
+   341→        return state;
+   342→      });
+   343→      return json(response, 200, { deleted: sessionMatch[1] });
+   344→    }
+   345→  }
+   346→
+   347→  // Git API
+   348→  const gitMatch = pathname.match(/^\/api\/git\/([a-z]+)$/);
+   349→  if (gitMatch) {
+   350→    const action = gitMatch[1];
+   351→    if (action === "status") return json(response, 200, await git.status().catch((error) => ({ repository: false, error: error.message })));
+   352→    if (action === "diff") return json(response, 200, await git.diff({ path: url.searchParams.get("path") || undefined, cached: url.searchParams.get("cached") === "true" }).catch((error) => ({ repository: false, error: error.message })));
+   353→    if (action === "log") return json(response, 200, await git.log({ limit: Number(url.searchParams.get("limit")) || 20 }).catch(() => ({ commits: [] })));
+   354→    if (action === "branches") return json(response, 200, await git.branches().catch(() => ({ branches: [], current: null })));
+   355→    if (action === "init") return json(response, 200, await git.init());
+   356→    if (action === "checkpoint") {
+   357→      const input = await body(request);
+   358→      return json(response, 200, await git.checkpoint(input.message || "zetora: manual checkpoint"));
+   359→    }
+   360→    if (action === "undo") {
+   361→      const input = await body(request).catch(() => ({}));
+   362→      // HARD undo requires explicit confirmation to prevent accidental data loss.
+   363→      if (input.hard === true && input.confirm !== true) {
+   364→        return json(response, 200, {
+   365→          undone: false,
+   366→          reason: "hard_undo_requires_confirmation",
+   367→          message: "Hard undo will discard all changes since the last checkpoint. Pass { hard: true, confirm: true } to proceed.",
+   368→          currentHead: await git.head().catch(() => null),
+   369→        });
+   370→      }
+   371→      const result = await git.undo({ hard: input.hard === true, confirm: input.confirm === true }).catch((error) => ({ undone: false, error: error.message }));
+   372→      if (result.backup) {
+   373→        result.recoveryHint = `If you lost work, recover it via: git checkout ${result.backup}`;
+   374→      }
+   375→      return json(response, 200, result);
+   376→    }
+   377→    if (action === "head") return json(response, 200, { sha: await git.head() });
+   378→  }
+   379→
+   380→  // PTY sessions API
+   381→  const ptyMatch = pathname.match(/^\/api\/terminal\/sessions(?:\/([^/]+))?$/);
+   382→  if (ptyMatch) {
+   383→    if (method === "GET" && !ptyMatch[1]) return json(response, 200, ptyRegistry.list());
+   384→    if (method === "POST" && !ptyMatch[1]) {
+   385→      const input = await body(request);
+   386→      const session = await ptyRegistry.create({ cwd: workspaceRoot, cols: input.cols || 80, rows: input.rows || 24 });
+   387→      return json(response, 201, { id: session.id, cwd: session.cwd, cols: session.cols, rows: session.rows });
+   388→    }
+   389→    if (method === "DELETE" && ptyMatch[1]) {
+   390→      const session = ptyRegistry.get(ptyMatch[1]);
+   391→      if (!session) return json(response, 404, { error: "Session not found" });
+   392→      session.close("deleted");
+   393→      return json(response, 200, { deleted: ptyMatch[1] });
+   394→    }
+   395→  }
+   396→
+   397→  // PTY send: run a command in the persistent session
+   398→  const ptySendMatch = pathname.match(/^\/api\/terminal\/sessions\/([^/]+)\/send$/);
+   399→  if (method === "POST" && ptySendMatch) {
+   400→    const session = ptyRegistry.get(ptySendMatch[1]);
+   401→    if (!session) return json(response, 404, { error: "Session not found" });
+   402→    if (session.closed) return json(response, 410, { error: "Session closed" });
+   403→    const input = await body(request);
+   404→    if (input.resize) session.resize(input.resize.cols, input.resize.rows);
+   405→    if (input.signal === "interrupt") { session.interrupt(); return json(response, 200, { interrupted: true }); }
+   406→    if (!input.command) return json(response, 400, { error: "command is required" });
+   407→    try {
+   408→      const result = await session.send(input.command, { timeout: input.timeout });
+   409→      return json(response, 200, result);
+   410→    } catch (error) { return json(response, 500, { error: error.message }); }
+   411→  }
+   412→
+   413→  // Legacy one-shot terminal (still supported for backwards compatibility)
+   414→  if (method === "POST" && pathname === "/api/terminal") {
+   415→    const input = await body(request);
+   416→    const result = await workspace.run(input.command, { approved: request.headers["x-zetora-confirm"] === "execute", timeout: input.timeout });
+   417→    return json(response, result.approvalRequired ? 202 : 200, result);
+   418→  }
+   419→
+   420→  // Image upload endpoint: stores raw bytes under .zetora/uploads/ and returns
+   421→  // a data URI suitable for inclusion in the next chat message.
+   422→  if (method === "POST" && pathname === "/api/uploads") {
+   423→    const chunks = [];
+   424→    let size = 0;
+   425→    for await (const chunk of request) {
+   426→      size += chunk.length;
+   427→      if (size > 12_000_000) return json(response, 413, { error: "Image exceeds 12MB limit" });
+   428→      chunks.push(chunk);
+   429→    }
+   430→    const buffer = Buffer.concat(chunks);
+   431→    // Try to parse multipart form data first; fall back to raw bytes with the
+   432→    // Content-Type header as the assumed MIME type.
+   433→    const rawContentType = request.headers["content-type"] || "application/octet-stream";
+   434→    let fileBuffer = buffer;
+   435→    let fileMime = rawContentType;
+   436→    let fileName = "upload";
+   437→    if (rawContentType.startsWith("multipart/form-data")) {
+   438→      const parsed = parseMultipart(buffer, rawContentType);
+   439→      if (parsed) {
+   440→        fileBuffer = parsed.buffer;
+   441→        fileMime = parsed.contentType || guessMimeFromName(parsed.filename);
+   442→        fileName = parsed.filename || "upload";
+   443→      } else {
+   444→        return json(response, 400, { error: "Could not parse multipart upload" });
+   445→      }
+   446→    } else {
+   447→      fileMime = guessMimeFromContentType(rawContentType);
+   448→    }
+   449→    if (!fileMime.startsWith("image/")) {
+   450→      return json(response, 415, { error: `Unsupported media type: ${fileMime}. Only image/* is accepted.` });
+   451→    }
+   452→    const ext = fileMime === "image/png" ? "png" : fileMime === "image/gif" ? "gif" : fileMime === "image/webp" ? "webp" : "jpg";
+   453→    const id = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+   454→    await writeFile(path.join(uploadsRoot, id), fileBuffer);
+   455→    const dataUri = `data:${fileMime};base64,${fileBuffer.toString("base64")}`;
+   456→    return json(response, 201, { id, mime: fileMime, filename: fileName, bytes: fileBuffer.length, dataUri });
+   457→  }
+   458→
+   459→  // Approval endpoints
+   460→  if (method === "GET" && pathname === "/api/approvals") {
+   461→    const state = await stateStore.read();
+   462→    return json(response, 200, state.approvals ?? []);
+   463→  }
+   464→
+   465→  const approvalMatch = pathname.match(/^\/api\/approvals\/([^/]+)$/);
+   466→  if (method === "POST" && approvalMatch) {
+   467→    const input = await body(request);
+   468→    const approvalId = decodeURIComponent(approvalMatch[1]);
+   469→    const state = await stateStore.read();
+   470→    const approval = (state.approvals ?? []).find((item) => item.id === approvalId);
+   471→    if (!approval) return json(response, 404, { error: "Approval not found" });
+   472→    if (approval.status !== "pending") return json(response, 409, { error: "Approval was already resolved" });
+   473→    const action = input.action === "approve" ? "approved" : "denied";
+   474→    const result = action === "approved" ? await runner.executeTool(approval.tool, true) : null;
+   475→    await approvalStoreApi.resolve(approvalId, action, result);
+   476→    await auditLog.record({ action: `approval.${action}`, approvalId, tool: approval.tool?.name, summary: approval.summary });
+   477→    return json(response, 200, { id: approvalId, status: action, result });
+   478→  }
+   479→
+   480→  if (method === "POST" && pathname === "/api/providers/test") {
+   481→    const input = await body(request);
+   482→    // When the caller passes an image as a data URI, exercise the vision path
+   483→    // against the configured provider so the user can confirm the model can
+   484→    // see the image and respond to it.
+   485→    const messages = input.image
+   486→      ? [{ role: "user", content: [
+   487→          { type: "text", text: input.prompt || "Describe this image in one sentence." },
+   488→          { type: "image_url", image_url: { url: input.image } },
+   489→        ] }]
+   490→      : [{ role: "user", content: input.prompt || "Reply with the single word: connected" }];
+   491→    const result = await callModel(input, { messages, tools: [] });
+   492→    return json(response, 200, { ok: true, text: result.text, usage: result.usage, vision: Boolean(input.image) });
+   493→  }
+   494→
+   495→  // Context files API
+   496→  if (method === "GET" && pathname === "/api/context") {
+   497→    const manifest = await contextFiles.readManifest();
+   498→    return json(response, 200, manifest);
+   499→  }
+   500→  if (method === "POST" && pathname === "/api/context") {
+   501→    const input = await body(request);
+   502→    const manifest = await contextFiles.add(input.path, input.description || "");
+   503→    return json(response, 201, manifest);
+   504→  }
+   505→  if (method === "DELETE" && pathname === "/api/context") {
+   506→    const input = await body(request);
+   507→    const manifest = await contextFiles.remove(input.path);
+   508→    return json(response, 200, manifest);
+   509→  }
+   510→
+   511→  // Compaction API: trigger a manual compaction of a session's history.
+   512→  if (method === "POST" && pathname === "/api/compact") {
+   513→    const input = await body(request);
+   514→    const sessionId = input.sessionId || "welcome";
+   515→    const state = await stateStore.read();
+   516→    const session = (state.sessions ?? []).find((item) => item.id === sessionId);
+   517→    if (!session) return json(response, 404, { error: "Session not found" });
+   518→    const messages = [
+   519→      { role: "system", content: "Compaction requested manually." },
+   520→      ...(session.messages ?? []),
+   521→    ];
+   522→    const result = await compactor.compact(messages, {
+   523→      provider: input.provider, model: input.model, apiKey: input.apiKey, baseUrl: input.baseUrl,
+   524→    });
+   525→    if (result.compacted) {
+   526→      await stateStore.update((next) => {
+   527→        const item = (next.sessions ?? []).find((entry) => entry.id === sessionId);
+   528→        if (item) {
+   529→          item.messages = result.messages;
+   530→          item.compacted = true;
+   531→          item.updatedAt = new Date().toISOString();
+   532→        }
+   533→        return next;
+   534→      });
+   535→    }
+   536→    return json(response, 200, result);
+   537→  }
+   538→
+   539→  // MCP API
+   540→  const mcpMatch = pathname.match(/^\/api\/mcp(?:\/([a-z]+))?(?:\/([^/]+))?$/);
+   541→  if (mcpMatch) {
+   542→    const action = mcpMatch[1];
+   543→    const id = mcpMatch[2];
+   544→    if (method === "GET" && !action) {
+   545→      return json(response, 200, {
+   546→        servers: [...mcpRegistry.clients.values()].map((client) => ({ id: client.id, closed: client.closed, serverInfo: client.serverInfo })),
+   547→        config: await mcpRegistry.readConfig().catch(() => ({})),
+   548→      });
+   549→    }
+   550→    if (method === "POST" && action === "servers") {
+   551→      const input = await body(request);
+   552→      const config = await mcpRegistry.addServer(input.id, { command: input.command, args: input.args, env: input.env, cwd: input.cwd });
+   553→      return json(response, 201, config);
+   554→    }
+   555→    if (method === "POST" && action === "connect" && id) {
+   556→      try { await mcpRegistry.connect(id); return json(response, 200, { ok: true }); }
+   557→      catch (error) { return json(response, 500, { error: error.message }); }
+   558→    }
+   559→    if (method === "DELETE" && action === "servers" && id) {
+   560→      const config = await mcpRegistry.removeServer(id);
+   561→      return json(response, 200, config);
+   562→    }
+   563→    if (method === "GET" && action === "tools") {
+   564→      const tools = await mcpRegistry.listAllTools();
+   565→      return json(response, 200, { tools });
+   566→    }
+   567→  }
+   568→
+   569→  // Skills API
+   570→  if (method === "GET" && pathname === "/api/skills") {
+   571→    return json(response, 200, { skills: await skills.list(), builtin: BUILTIN_SKILLS });
+   572→  }
+   573→  if (method === "POST" && pathname === "/api/skills/invoke") {
+   574→    const input = await body(request);
+   575→    const manifest = await skills.get(input.id).catch(() => null);
+   576→    if (!manifest) return json(response, 404, { error: "Skill not found" });
+   577→    const errors = skills.validateInputs(manifest, input.inputs || {});
+   578→    if (errors.length) return json(response, 400, { error: errors.join("; ") });
+   579→    const prompt = skills.renderPrompt(manifest, input.inputs || {});
+   580→    return json(response, 200, { ok: true, id: input.id, prompt, mode: manifest.mode || "build" });
+   581→  }
+   582→
+   583→  // Design tokens API
+   584→  if (method === "GET" && pathname === "/api/design-tokens") {
+   585→    return json(response, 200, { tokens: await designTokens.read() });
+   586→  }
+   587→  if (method === "POST" && pathname === "/api/design-tokens") {
+   588→    const input = await body(request);
+   589→    const tokens = await designTokens.write(input.tokens || {});
+   590→    return json(response, 201, { tokens });
+   591→  }
+   592→  if (method === "GET" && pathname === "/api/design-tokens/reference") {
+   593→    const tokens = await designTokens.read();
+   594→    if (!tokens) return json(response, 404, { error: "No design tokens configured" });
+   595→    const html = designTokens.toReferenceHtml(tokens);
+   596→    response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+   597→    response.end(html);
+   598→    return;
+   599→  }
+   600→  if (method === "GET" && pathname === "/api/design-tokens/css") {
+   601→    const tokens = await designTokens.read();
+   602→    if (!tokens) return json(response, 404, { error: "No design tokens configured" });
+   603→    const css = designTokens.toCss(tokens);
+   604→    response.writeHead(200, { "content-type": "text/css; charset=utf-8", "cache-control": "no-store" });
+   605→    response.end(css);
+   606→    return;
+   607→  }
+   608→
+   609→  // Skills CRUD API
+   610→  if (method === "POST" && pathname === "/api/skills/create") {
+   611→    const input = await body(request);
+   612→    try {
+   613→      const skill = await skills.create(input.id, input.manifest);
+   614→      return json(response, 201, skill);
+   615→    } catch (error) { return json(response, 400, { error: error.message }); }
+   616→  }
+   617→  if (method === "PUT" && pathname === "/api/skills/update") {
+   618→    const input = await body(request);
+   619→    try {
+   620→      const skill = await skills.update(input.id, input.manifest);
+   621→      return json(response, 200, skill);
+   622→    } catch (error) { return json(response, 400, { error: error.message }); }
+   623→  }
+   624→  if (method === "DELETE" && pathname === "/api/skills/delete") {
+   625→    const input = await body(request);
+   626→    try {
+   627→      const result = await skills.delete(input.id);
+   628→      return json(response, 200, result);
+   629→    } catch (error) { return json(response, 400, { error: error.message }); }
+   630→  }
+   631→  if (method === "GET" && pathname === "/api/skills/history") {
+   632→    return json(response, 200, { history: skills.getHistory() });
+   633→  }
+   634→
+   635→  // Auto-fix API: trigger a fix on a file or directory outside the agent loop.
+   636→  if (method === "POST" && pathname === "/api/autofix") {
+   637→    const input = await body(request);
+   638→    try {
+   639→      const result = await autoFix.fix(input.path, { fixers: input.fixers, dryRun: input.dryRun, verify: input.verify });
+   640→      return json(response, 200, result);
+   641→    } catch (error) { return json(response, 400, { error: error.message }); }
+   642→  }
+   643→
+   644→  // Diagnose API: scan command output for known error patterns and return hints.
+   645→  if (method === "POST" && pathname === "/api/diagnose") {
+   646→    const input = await body(request);
+   647→    const matches = diagnoseError(String(input.output || ""));
+   648→    return json(response, 200, { matches });
+   649→  }
+   650→
+   651→  // Standalone tool endpoints: grep, fetch, tests, parse_ast.
+   652→  if (method === "GET" && pathname === "/api/grep") {
+   653→    const result = await workspace.grep(url.searchParams.get("pattern") || "", {
+   654→      path: url.searchParams.get("path") || undefined,
+   655→      glob: url.searchParams.get("glob") || undefined,
+   656→      caseSensitive: url.searchParams.get("caseSensitive") === "true",
+   657→      contextBefore: Number(url.searchParams.get("contextBefore")) || 0,
+   658→      contextAfter: Number(url.searchParams.get("contextAfter")) || 0,
+   659→      maxResults: Number(url.searchParams.get("maxResults")) || 50,
+   660→    });
+   661→    return json(response, 200, { results: result });
+   662→  }
+   663→  if (method === "POST" && pathname === "/api/fetch") {
+   664→    const input = await body(request);
+   665→    const result = await workspace.fetchUrl(input.url, { method: input.method, headers: input.headers, body: input.body, maxBytes: input.maxBytes, asText: input.asText });
+   666→    return json(response, 200, result);
+   667→  }
+   668→  if (method === "POST" && pathname === "/api/tests/run") {
+   669→    const input = await body(request);
+   670→    const result = await workspace.runTests({ pattern: input.pattern, timeout: input.timeout });
+   671→    const diagnostics = diagnoseError(`${result.stdout}\n${result.stderr}`);
+   672→    return json(response, 200, { ...result, diagnostics });
+   673→  }
+   674→  if (method === "GET" && pathname === "/api/parse-ast") {
+   675→    const result = await workspace.parseAST(url.searchParams.get("path") || "", { detail: url.searchParams.get("detail") || "summary" });
+   676→    return json(response, 200, result);
+   677→  }
+   678→
+   679→  // Todo list API (per-session agent task list).
+   680→  if (method === "GET" && pathname === "/api/todos") {
+   681→    return json(response, 200, { items: todoList.list(), summary: todoList.summary() });
+   682→  }
+   683→  if (method === "POST" && pathname === "/api/todos") {
+   684→    const input = await body(request);
+   685→    const action = input.action;
+   686→    if (action === "add") return json(response, 201, todoList.add(input.content, { priority: input.priority }));
+   687→    if (action === "update") return json(response, 200, todoList.update(input.id, { content: input.content, status: input.status, priority: input.priority }));
+   688→    if (action === "remove") return json(response, 200, todoList.remove(input.id));
+   689→    if (action === "clear") { todoList.clear(); return json(response, 200, { cleared: true }); }
+   690→    return json(response, 400, { error: "Unknown action" });
+   691→  }
+   692→
+   693→  // Search index API: rebuild + query.
+   694→  if (method === "POST" && pathname === "/api/search-index/rebuild") {
+   695→    const tree = await workspace.tree(".", { maxDepth: 12, maxEntries: 5000 });
+   696→    const files = tree.filter((f) => f.type === "file").map((f) => f.path);
+   697→    const result = await searchIndex.indexAll(files);
+   698→    return json(response, 200, result);
+   699→  }
+   700→  if (method === "GET" && pathname === "/api/search-index") {
+   701→    const query = url.searchParams.get("q") || "";
+   702→    const limit = Number(url.searchParams.get("limit")) || 20;
+   703→    const results = searchIndex.search(query, { limit });
+   704→    return json(response, 200, { query, results, stats: searchIndex.stats() });
+   705→  }
+   706→
+   707→  // LSP diagnostics API.
+   708→  if (method === "GET" && pathname === "/api/diagnostics") {
+   709→    const target = url.searchParams.get("path") || ".";
+   710→    const result = await lsp.diagnose(target);
+   711→    return json(response, 200, result);
+   712→  }
+   713→  if (method === "GET" && pathname === "/api/lsp/status") {
+   714→    return json(response, 200, await lsp.status());
+   715→  }
+   716→  if (method === "POST" && pathname === "/api/lsp/install") {
+   717→    // SECURITY (v0.9): npm install is a mutating operation that executes
+   718→    // arbitrary install scripts from the network. Route it through the same
+   719→    // approval workflow as run_command so the user must explicitly consent.
+   720→    const input = await body(request).catch(() => ({}));
+   721→    if (request.headers["x-zetora-confirm"] !== "install") {
+   722→      // Return 202 with approval required — matches the terminal pattern.
+   723→      return json(response, 202, {
+   724→        approvalRequired: true,
+   725→        risk: "execute",
+   726→        command: "npm install --save-dev eslint@latest",
+   727→        reason: "Installing npm packages runs arbitrary install scripts from the network. Send { } with header x-zetora-confirm: install to proceed.",
+   728→        pinnedVersion: null, // ESLint latest — we don't pin, which is why approval matters
+   729→      });
+   730→    }
+   731→    // User confirmed. Record an audit log entry.
+   732→    await auditLog({
+   733→      action: "lsp.install",
+   734→      command: "npm install --save-dev eslint@latest",
+   735→      approved: true,
+   736→      approvedBy: "http-header",
+   737→      at: new Date().toISOString(),
+   738→    });
+   739→    const result = await lsp.install();
+   740→    return json(response, 200, result);
+   741→  }
+   742→
+   743→  // Git worktree API.
+   744→  if (method === "GET" && pathname === "/api/worktrees") {
+   745→    return json(response, 200, await git.listWorktrees().catch(() => ({ worktrees: [] })));
+   746→  }
+   747→  if (method === "POST" && pathname === "/api/worktrees") {
+   748→    const input = await body(request);
+   749→    return json(response, 201, await git.addWorktree(input.name, { base: input.base }));
+   750→  }
+   751→  const worktreeMatch = pathname.match(/^\/api\/worktrees\/([^/]+)$/);
+   752→  if (method === "DELETE" && worktreeMatch) {
+   753→    return json(response, 200, await git.removeWorktree(decodeURIComponent(worktreeMatch[1])));
+   754→  }
+   755→
+   756→  // Git graph API (for visual rendering).
+   757→  if (method === "GET" && pathname === "/api/git-graph") {
+   758→    return json(response, 200, await git.graph({ limit: Number(url.searchParams.get("limit")) || 50 }).catch(() => ({ commits: [], edges: [] })));
+   759→  }
+   760→
+   761→  // Plugins API.
+   762→  if (method === "GET" && pathname === "/api/plugins") {
+   763→    return json(response, 200, { plugins: await pluginRegistry.list() });
+   764→  }
+   765→  if (method === "POST" && pathname === "/api/plugins/install") {
+   766→    const input = await body(request);
+   767→    return json(response, 201, await pluginRegistry.install(input.id, input.manifest, input.entry || ""));
+   768→  }
+   769→  if (method === "DELETE" && pathname === "/api/plugins") {
+   770→    const input = await body(request);
+   771→    return json(response, 200, await pluginRegistry.uninstall(input.id));
+   772→  }
+   773→
+   774→  // Collaboration API (WebSocket-style session management over HTTP).
+   775→  if (method === "GET" && pathname === "/api/collab/sessions") {
+   776→    return json(response, 200, { sessions: collabRegistry.list() });
+   777→  }
+   778→  if (method === "POST" && pathname === "/api/collab/sessions") {
+   779→    const input = await body(request);
+   780→    const session = collabRegistry.create(input.id, { document: input.document });
+   781→    return json(response, 201, { id: session.id });
+   782→  }
+   783→  const collabMatch = pathname.match(/^\/api\/collab\/sessions\/([^/]+)(?:\/(join|leave|edit|snapshot|stream))?$/);
+   784→  if (collabMatch) {
+   785→    const sessionId = decodeURIComponent(collabMatch[1]);
+   786→    const action = collabMatch[2];
+   787→    const session = collabRegistry.get(sessionId);
+   788→    if (!session) return json(response, 404, { error: "Collab session not found" });
+   789→    if (method === "GET" && !action) return json(response, 200, session.getSnapshot());
+   790→    if (action === "join" && method === "POST") {
+   791→      const input = await body(request);
+   792→      const peerId = input.peerId || crypto.randomUUID();
+   793→      const result = session.join(peerId, input);
+   794→      // Notify all SSE subscribers that a new peer joined.
+   795→      broadcastCollab(sessionId, { type: "peers", peers: [...session.peers.entries()].map(([id, p]) => ({ id, ...p })) });
+   796→      return json(response, 200, result);
+   797→    }
+   798→    if (action === "leave" && method === "POST") {
+   799→      const input = await body(request);
+   800→      session.leave(input.peerId);
+   801→      broadcastCollab(sessionId, { type: "peers", peers: [...session.peers.entries()].map(([id, p]) => ({ id, ...p })) });
+   802→      return json(response, 200, { left: input.peerId });
+   803→    }
+   804→    if (action === "edit" && method === "POST") {
+   805→      const input = await body(request);
+   806→      const op = session.edit(input.peerId, input.operation);
+   807→      return json(response, 200, op);
+   808→    }
+   809→    if (action === "snapshot" && method === "GET") {
+   810→      return json(response, 200, session.getSnapshot());
+   811→    }
+   812→    if (action === "stream" && method === "GET") {
+   813→      // SSE stream: push edits/cursor updates to subscribers.
+   814→      response.writeHead(200, {
+   815→        "content-type": "text/event-stream",
+   816→        "cache-control": "no-store",
+   817→        "connection": "keep-alive",
+   818→      });
+   819→      response.write(`data: ${JSON.stringify({ type: "connected", sessionId, document: session.document })}\n\n`);
+   820→      if (!collabSubscribers.has(sessionId)) collabSubscribers.set(sessionId, new Set());
+   821→      collabSubscribers.get(sessionId).add(response);
+   822→      request.once("close", () => {
+   823→        collabSubscribers.get(sessionId)?.delete(response);
+   824→      });
+   825→      return;
+   826→    }
+   827→  }
+   828→
+   829→  // AI inline suggestions API: calls the configured provider with a
+   830→  // fill-in-the-middle prompt. Returns the model's completion as a suggestion.
+   831→  if (method === "POST" && pathname === "/api/suggest") {
+   832→    const input = await body(request);
+   833→    const prefix = String(input.prefix || "");
+   834→    const suffix = String(input.suffix || "");
+   835→    const language = input.language || "javascript";
+   836→    const filePath = input.path || "";
+   837→    // If no provider is configured, return a heuristic suggestion based on
+   838→    // common patterns (e.g. close brackets, complete function signatures).
+   839→    const provider = input.provider || process.env.ZETORA_PROVIDER || "demo";
+   840→    const model = input.model || process.env.ZETORA_MODEL || "demo-local";
+   841→    if (provider === "demo" || !input.apiKey) {
+   842→      const heuristic = computeHeuristicSuggestion(prefix, suffix, language);
+   843→      return json(response, 200, { suggestion: heuristic, prefix, suffix, source: "heuristic" });
+   844→    }
+   845→    try {
+   846→      const fimPrompt = buildFillInMiddlePrompt(prefix, suffix, language, filePath);
+   847→      const result = await callModel({ provider, model, baseUrl: input.baseUrl, apiKey: input.apiKey }, {
+   848→        messages: [{ role: "user", content: fimPrompt }],
+   849→        tools: [],
+   850→        temperature: 0.05,
+   851→      });
+   852→      const suggestion = (result.text || "").trim();
+   853→      return json(response, 200, { suggestion, prefix, suffix, source: "model", usage: result.usage });
+   854→    } catch (error) {
+   855→      return json(response, 200, { suggestion: null, prefix, error: error.message, source: "model_error" });
+   856→    }
+   857→  }
+   858→
+   859→  // Markdown render API (server-side safe render to HTML).
+   860→  if (method === "POST" && pathname === "/api/markdown") {
+   861→    const input = await body(request);
+   862→    const { renderMarkdown } = await import("../../../packages/artifacts/src/index.js");
+   863→    const html = renderMarkdown(String(input.content || ""));
+   864→    return json(response, 200, { html });
+   865→  }
+   866→
+   867→  // SECURITY (v0.9): Audit log API — read-only by default.
+   868→  if (method === "GET" && pathname === "/api/audit") {
+   869→    const limit = Number(url.searchParams.get("limit")) || 100;
+   870→    const offset = Number(url.searchParams.get("offset")) || 0;
+   871→    const action = url.searchParams.get("action") || undefined;
+   872→    const entries = await auditLog.read({ limit, offset, action });
+   873→    return json(response, 200, { entries, count: entries.length });
+   874→  }
+   875→  if (method === "GET" && pathname === "/api/audit/stats") {
+   876→    return json(response, 200, await auditLog.stats());
+   877→  }
+   878→
+   879→  // SECURITY (v0.9): Trust registry API — manage trusted author public keys.
+   880→  if (method === "GET" && pathname === "/api/trust") {
+   881→    return json(response, 200, { authors: await trustRegistry.list() });
+   882→  }
+   883→  if (method === "POST" && pathname === "/api/trust") {
+   884→    const input = await body(request);
+   885→    if (request.headers["x-zetora-confirm"] !== "trust") {
+   886→      return json(response, 202, { approvalRequired: true, reason: "Adding a trusted author is a security-sensitive operation. Send with header x-zetora-confirm: trust." });
+   887→    }
+   888→    await auditLog.record({ action: "trust.add", authorId: input.authorId, name: input.name });
+   889→    const author = await trustRegistry.addAuthor(input.authorId, input.publicKey, input.name, input.trustLevel || "trusted");
+   890→    return json(response, 201, author);
+   891→  }
+   892→
+   893→  // SECURITY (v0.9): Secret detection API — scan a string for secrets.
+   894→  if (method === "POST" && pathname === "/api/secrets/scan") {
+   895→    const input = await body(request);
+   896→    const { detectSecrets, redactSecrets: redact } = await import("../../../packages/security/src/secrets.js");
+   897→    const detected = detectSecrets(input.text || "");
+   898→    const { redacted, found } = redact(input.text || "");
+   899→    return json(response, 200, { detected, found, redacted });
+   900→  }
+   901→
+   902→  // SECURITY (v0.9): Plugin signing key generation — first-run setup.
+   903→  if (method === "POST" && pathname === "/api/plugins/generate-keys") {
+   904→    if (request.headers["x-zetora-confirm"] !== "generate-keys") {
+   905→      return json(response, 202, { approvalRequired: true, reason: "Generating signing keys is a security-sensitive operation. Send with header x-zetora-confirm: generate-keys." });
+   906→    }
+   907→    await auditLog.record({ action: "plugin.generate-keys" });
+   908→    const keys = await pluginSigner.generateKeys();
+   909→    return json(response, 201, { ok: true, ...keys });
+   910→  }
+   911→
+   912→  // Diff endpoint
+   913→  if (method === "GET" && pathname === "/api/diff") {
+   914→    const filePath = url.searchParams.get("path") || "";
+   915→    const state = await stateStore.read();
+   916→    const approvals = (state.approvals ?? []).filter((item) => item.status === "approved" && item.tool?.input?.path === filePath);
+   917→    const latest = approvals.at(-1);
+   918→    if (!latest) return json(response, 200, { path: filePath, previous: null });
+   919→    const current = await workspace.read(filePath).catch(() => ({ content: "" }));
+   920→    return json(response, 200, {
+   921→      path: filePath,
+   922→      previous: latest.result?.diff?.previous ?? null,
+   923→      next: latest.result?.diff?.next ?? current.content,
+   924→      replacedFrom: latest.result?.diff?.replacedFrom ?? null,
+   925→      replacedTo: latest.result?.diff?.replacedTo ?? null,
+   926→      approvalId: latest.id,
+   927→      tool: latest.tool.name,
+   928→      resolvedAt: latest.resolvedAt,
+   929→    });
+   930→  }
+   931→
+   932→  // Artifact renderer endpoint: returns a self-contained HTML document for
+   933→  // any supported file type (image, markdown, json, code, svg, html).
+   934→  if (method === "GET" && pathname === "/api/artifact") {
+   935→    const filePath = url.searchParams.get("path") || "";
+   936→    try {
+   937→      const absolute = workspace.resolve(filePath);
+   938→      const info = await stat(absolute);
+   939→      if (!info.isFile()) return json(response, 400, { error: "Path is not a file" });
+   940→      const html = await renderArtifact(absolute);
+   941→      response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" });
+   942→      response.end(html);
+   943→      return;
+   944→    } catch (error) { return json(response, 404, { error: error.message }); }
+   945→  }
+   946→
+   947→  // SSE stream for file watcher events
+   948→  if (method === "GET" && pathname === "/api/events") {
+   949→    response.writeHead(200, {
+   950→      "content-type": "text/event-stream",
+   951→      "cache-control": "no-store",
+   952→      "connection": "keep-alive",
+   953→      "x-content-type-options": "nosniff",
+   954→    });
+   955→    response.write(`data: ${JSON.stringify({ type: "connected", at: new Date().toISOString() })}\n\n`);
+   956→    watcherClients.add(response);
+   957→    request.once("close", () => watcherClients.delete(response));
+   958→    return;
+   959→  }
+   960→
+   961→  if (method === "POST" && (pathname === "/api/agent/run" || pathname === "/api/chat")) {
+   962→    const input = await body(request);
+   963→    const sessionId = input.sessionId || "welcome";
+   964→    await recordMessage(sessionId, "user", input.prompt);
+   965→    response.writeHead(200, {
+   966→      "content-type": "application/x-ndjson; charset=utf-8",
+   967→      "cache-control": "no-store",
+   968→      "x-content-type-options": "nosniff",
+   969→    });
+   970→    let open = true;
+   971→    request.once("close", () => { open = false; });
+   972→    const emit = (event) => {
+   973→      if (open && !response.writableEnded) {
+   974→        response.write(`${JSON.stringify(event)}\n`);
+   975→        persistSessionEvent(sessionId, event).catch(() => {});
+   976→      }
+   977→    };
+   978→    const result = await runner.run(input, emit);
+   979→    if (result.text) await recordMessage(sessionId, "assistant", result.text);
+   980→    if (!response.writableEnded) response.end();
+   981→    return;
+   982→  }
+   983→
+   984→  return json(response, 404, { error: "API route not found" });
+   985→}
+   986→
+   987→const server = http.createServer(async (request, response) => {
+   988→  const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+   989→  // SECURITY (v0.9): rate limit all API requests per-IP.
+   990→  if (url.pathname.startsWith("/api/")) {
+   991→    const rl = applyRateLimit(rateLimiter, request, response);
+   992→    if (!rl.allowed) {
+   993→      return json(response, 429, { error: "Too many requests", retryAfter: Math.ceil(rl.retryAfterMs / 1000) });
+   994→    }
+   995→  }
+   996→  try {
+   997→    if (url.pathname.startsWith("/api/")) return await api(request, response, url);
+   998→    if (await serveStatic(request, response, url.pathname)) return;
+   999→    if (request.method === "GET" && await serveStatic(request, response, "/")) return;
+  1000→    json(response, 404, { error: "Not found" });
+  1001→  } catch (error) {
+  1002→    // SECURITY: never leak secrets in error messages.
+  1003→    const safeError = redactSecrets(error.message || "Internal error").redacted;
+  1004→    console.error(`[zetora] ${request.method} ${url.pathname}:`, safeError);
+  1005→    if (!response.headersSent) json(response, error.status || 500, { error: safeError });
+  1006→    else if (!response.writableEnded) response.end();
+  1007→  }
+  1008→});
+  1009→
+  1010→server.listen(port, host, () => {
+  1011→  console.log(`Zetora is ready at http://${host}:${port}`);
+  1012→  console.log(`Workspace: ${workspaceRoot}`);
+  1013→  // Warn the user if they're using the default demo workspace.
+  1014→  if (workspaceRoot === path.resolve(root, "workspace")) {
+  1015→    console.log(`\n⚠  You are using the demo workspace at ${workspaceRoot}`);
+  1016→    console.log(`   To work on your own project, restart with:`);
+  1017→    console.log(`   ZETORA_WORKSPACE=/path/to/your/project npm run dev\n`);
+  1018→  }
+  1019→  // SECURITY: warn if bound to all interfaces.
+  1020→  if (host === "0.0.0.0") {
+  1021→    console.log(`\n⚠⚠  SECURITY WARNING: Zetora is bound to 0.0.0.0 (all network interfaces).`);
+  1022→    console.log(`   Anyone on your network can access the agent's file/write/command tools.`);
+  1023→    console.log(`   This is intentionally restricted — to enable remote access you set BOTH:`);
+  1024→    console.log(`     ZETORA_HOST=0.0.0.0 AND ZETORA_ALLOW_REMOTE=1`);
+  1025→    console.log(`   If this was unintentional, restart without these env vars.\n`);
+  1026→  }
+  1027→});
+  1028→
+  1029→// Real-time collaboration over SSE + POST.
+  1030→// Each session maintains a list of SSE subscribers. Edits arrive via POST and
+  1031→// are broadcast to all subscribers. This avoids the need for a WebSocket
+  1032→// dependency while still providing push-based real-time updates.
+  1033→const collabSubscribers = new Map(); // sessionId -> Set<ServerResponse>
+  1034→
+  1035→collabRegistry.sessions.forEach = collabRegistry.sessions.forEach?.bind(collabRegistry.sessions);
+  1036→const origCreate = CollabRegistry.prototype.create;
+  1037→// Hook into session creation to wire up the broadcast on edit.
+  1038→const origEdit = CollabSession.prototype.edit;
+  1039→CollabSession.prototype.edit = function (peerId, operation) {
+  1040→  const op = origEdit.call(this, peerId, operation);
+  1041→  broadcastCollab(this.id, { type: "edit", ...op });
+  1042→  return op;
+  1043→};
+  1044→CollabSession.prototype.updateCursor = function (peerId, cursor) {
+  1045→  this.peers.get(peerId).cursor = cursor;
+  1046→  this.emit("cursor", { peerId, ...cursor });
+  1047→  broadcastCollab(this.id, { type: "cursor", peerId, cursor });
+  1048→};
+  1049→
+  1050→function broadcastCollab(sessionId, message) {
+  1051→  const subs = collabSubscribers.get(sessionId);
+  1052→  if (!subs) return;
+  1053→  const payload = `data: ${JSON.stringify(message)}\n\n`;
+  1054→  for (const sub of subs) {
+  1055→    try { sub.write(payload); } catch {}
+  1056→  }
+  1057→}
+  1058→
+  1059→function shutdown(signal) {
+  1060→  console.log(`\n${signal}: closing Zetora`);
+  1061→  ptyRegistry.closeAll();
+  1062→  mcpRegistry.closeAll();
+  1063→  watcher.close();
+  1064→  rateLimiter.close();
+  1065→  for (const session of collabRegistry.sessions.values()) session.removeAllListeners();
+  1066→  server.close(() => process.exit(0));
+  1067→  setTimeout(() => process.exit(1), 5_000).unref();
+  1068→}
+  1069→process.on("SIGINT", () => shutdown("SIGINT"));
+  1070→process.on("SIGTERM", () => shutdown("SIGTERM"));
+  1071→
+  1072→/**
+  1073→ * Minimal multipart/form-data parser sufficient for image uploads. Extracts
+  1074→ * the first file part and returns its filename, content-type, and buffer.
+  1075→ * Returns null when the body cannot be parsed.
+  1076→ */
+  1077→function parseMultipart(buffer, contentType) {
+  1078→  const boundaryMatch = contentType.match(/boundary=("?)([^";\s]+)\1/);
+  1079→  if (!boundaryMatch) return null;
+  1080→  const boundary = Buffer.from(`--${boundaryMatch[2]}`);
+  1081→  const parts = [];
+  1082→  let start = 0;
+  1083→  while (true) {
+  1084→    const idx = buffer.indexOf(boundary, start);
+  1085→    if (idx < 0) break;
+  1086→    if (start > 0) parts.push(buffer.slice(start, idx - 2)); // -2 for trailing CRLF
+  1087→    start = idx + boundary.length + 2; // skip boundary + CRLF
+  1088→  }
+  1089→  for (const part of parts) {
+  1090→    if (part.length === 0) continue;
+  1091→    // Skip the closing boundary marker.
+  1092→    if (part[0] === 0x2d && part[1] === 0x2d) continue; // starts with "--"
+  1093→    const headerEnd = part.indexOf("\r\n\r\n");
+  1094→    if (headerEnd < 0) continue;
+  1095→    const headerText = part.slice(0, headerEnd).toString("utf8");
+  1096→    const body = part.slice(headerEnd + 4);
+  1097→    // Trailing CRLF before the next boundary.
+  1098→    const crlf = Buffer.from("\r\n");
+  1099→    const trimmed = body.length >= 2 && body[body.length - 2] === 0x0d && body[body.length - 1] === 0x0a ? body.slice(0, -2) : body;
+  1100→    const dispositionMatch = headerText.match(/Content-Disposition:\s*form-data;[^\r\n]*filename="([^"]+)"/i);
+  1101→    const typeMatch = headerText.match(/Content-Type:\s*([^\r\n]+)/i);
+  1102→    if (dispositionMatch) {
+  1103→      return {
+  1104→        filename: dispositionMatch[1],
+  1105→        contentType: typeMatch ? typeMatch[1].trim() : guessMimeFromName(dispositionMatch[1]),
+  1106→        buffer: trimmed,
+  1107→      };
+  1108→    }
+  1109→  }
+  1110→  return null;
+  1111→}
+  1112→
+  1113→function guessMimeFromName(name) {
+  1114→  const ext = path.extname(name).toLowerCase();
+  1115→  const map = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml", ".avif": "image/avif" };
+  1116→  return map[ext] || "application/octet-stream";
+  1117→}
+  1118→
+  1119→function guessMimeFromContentType(contentType) {
+  1120→  return String(contentType).split(";")[0].trim();
+  1121→}
+  1122→
+  1123→/**
+  1124→ * Build a fill-in-the-middle prompt for inline code completion. The model is
+  1125→ * asked to output only the code that should appear between prefix and suffix.
+  1126→ */
+  1127→function buildFillInMiddlePrompt(prefix, suffix, language, filePath) {
+  1128→  return `You are a code completion engine. Complete the code between the prefix and suffix.
+  1129→Output ONLY the code that should be inserted between them. No markdown, no explanation, no code fences.
+  1130→
+  1131→File: ${filePath || "untitled"}
+  1132→Language: ${language}
+  1133→
+  1134→=== PREFIX (before cursor) ===
+  1135→${prefix}
+  1136→
+  1137→=== SUFFIX (after cursor) ===
+  1138→${suffix}
+  1139→
+  1140→=== INSERT (output only this, no preamble) ===`;
+  1141→}
+  1142→
+  1143→/**
+  1144→ * Heuristic suggestion for the demo provider. Closes common patterns:
+  1145→ * unclosed brackets, incomplete function signatures, console.log snippets.
+  1146→ */
+  1147→function computeHeuristicSuggestion(prefix, suffix, language) {
+  1148→  const last = prefix.slice(-50);
+  1149→  // Close unclosed brackets.
+  1150→  const opens = (last.match(/[(\[{]/g) || []).length;
+  1151→  const closes = (last.match(/[)\]}]/g) || []).length;
+  1152→  if (opens > closes) {
+  1153→    const stack = [];
+  1154→    for (const ch of last) {
+  1155→      if (ch === "(" || ch === "[" || ch === "{") stack.push(ch);
+  1156→      else if (ch === ")" && stack[stack.length - 1] === "(") stack.pop();
+  1157→      else if (ch === "]" && stack[stack.length - 1] === "[") stack.pop();
+  1158→      else if (ch === "}" && stack[stack.length - 1] === "{") stack.pop();
+  1159→    }
+  1160→    const closeMap = { "(": ")", "[": "]", "{": "}" };
+  1161→    return stack.reverse().map((ch) => closeMap[ch]).join("");
+  1162→  }
+  1163→  // Suggest function body opener.
+  1164→  if (/\bfunction\s+\w+\s*\([^)]*\)\s*\{?\s*$/.test(last) && !last.endsWith("{")) {
+  1165→    return "{\n  \n}";
+  1166→  }
+  1167→  // Suggest console.log for debugging.
+  1168→  if (/\bconsole\b\.?$/.test(last)) return ".log()";
+  1169→  if (/\breturn\s*$/.test(last)) return " ";
+  1170→  return "";
+  1171→}
+  1172→
