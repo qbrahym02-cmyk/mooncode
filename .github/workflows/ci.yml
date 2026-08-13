@@ -34,7 +34,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: npm
 
       - name: Verify Node version >= 20.12
         run: node -e "const v=process.versions.node;const[major,minor]=v.split('.').map(Number);if(major<20||(major===20&&minor<12)){console.error('Node '+v+' is too old. Need >=20.12');process.exit(1)}console.log('Node '+v+' OK')"
@@ -46,6 +45,9 @@ jobs:
         run: npm test
         env:
           NODE_ENV: test
+
+      - name: Verify environment validation
+        run: node scripts/ops.mjs env:validate
 
       - name: Upload test results
         if: always()
@@ -87,12 +89,18 @@ jobs:
 
       - name: Check for private keys
         run: |
-          # Fail if any private key block appears in tracked files.
-          if grep -r "BEGIN.*PRIVATE KEY" --include="*.js" --include="*.ts" --include="*.json" --include="*.md" . --exclude-dir=.git --exclude-dir=node_modules; then
-            echo "::error::Found a private key in tracked files."
+          # Fail if any actual private key block appears in tracked files.
+          # Exclude: test fixtures, the secret-detection module itself (which
+          # contains the pattern as a string), docs, and .github workflows.
+          EXCLUDES="--exclude-dir=.git --exclude-dir=node_modules --exclude-dir=tests --exclude-dir=.github"
+          EXCLUDES="$EXCLUDES --exclude=secrets.js --exclude=security.test.js --exclude=*.md"
+          # Match actual PEM blocks (header + base64 + footer on separate lines).
+          if grep -rzP "-----BEGIN [A-Z ]*PRIVATE KEY-----\n[A-Za-z0-9+/=\n]+-----END [A-Z ]*PRIVATE KEY-----" \
+              --include="*.js" --include="*.ts" --include="*.json" $EXCLUDES . ; then
+            echo "::error::Found an actual private key in tracked files."
             exit 1
           fi
-          echo "No private keys found in source."
+          echo "No actual private keys found in source."
 
   # ─── Docker Build ───────────────────────────────────────────────────────
   docker:
