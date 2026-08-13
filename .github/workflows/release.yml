@@ -92,17 +92,10 @@ jobs:
           mv "${ASSET_NAME}/cli-src" "${ASSET_NAME}/apps/cli/src"
 
           if [[ "${{ matrix.os }}" == windows-* ]]; then
-            cat > "${ASSET_NAME}/zetora.cmd" <<'CMD'
-@echo off
-node "%~dp0apps\cli\src\cli.js" %*
-CMD
+            printf '@echo off\r\nnode "%%~dp0apps\\cli\\src\\cli.js" %%*\r\n' > "${ASSET_NAME}/zetora.cmd"
             7z a -tzip "dist/${ASSET_NAME}.zip" "${ASSET_NAME}"
           else
-            cat > "${ASSET_NAME}/zetora" <<'SH'
-#!/usr/bin/env bash
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec node "$DIR/apps/cli/src/cli.js" "$@"
-SH
+            printf '#!/usr/bin/env bash\nDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\nexec node "$DIR/apps/cli/src/cli.js" "$@"\n' > "${ASSET_NAME}/zetora"
             chmod +x "${ASSET_NAME}/zetora"
             tar -czf "dist/${ASSET_NAME}.tar.gz" "${ASSET_NAME}"
           fi
