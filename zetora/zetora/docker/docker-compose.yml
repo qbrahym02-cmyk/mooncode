@@ -1,0 +1,86 @@
+# ════════════════════════════════════════════════════════════════════════════
+# Zetora docker-compose — local development and production-like deployment
+# ════════════════════════════════════════════════════════════════════════════
+#
+# Usage:
+#   docker compose -f docker/docker-compose.yml up dev      # dev mode
+#   docker compose -f docker/docker-compose.yml up prod     # production mode
+#
+# Volumes:
+#   workspace/  → your project files (the agent operates here)
+#   .zetora/    → sessions, approvals, audit log, MCP config
+# ════════════════════════════════════════════════════════════════════════════
+
+services:
+  # ─── Development Server ─────────────────────────────────────────────────
+  dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: development
+    ports:
+      - "4173:4173"
+    volumes:
+      - ../workspace:/app/workspace
+      - ../.zetora:/app/.zetora
+      - ../packages:/app/packages:ro      # hot-reload source changes
+      - ../apps:/app/apps:ro
+      - ../tests:/app/tests:ro
+    environment:
+      - NODE_ENV=development
+      - ZETORA_LOG_LEVEL=debug
+      # Pass through provider keys from host .env
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4173/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ─── Production Server ──────────────────────────────────────────────────
+  prod:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: production
+    ports:
+      - "127.0.0.1:4173:4173"   # bind to localhost only; use a reverse proxy for remote
+    volumes:
+      - ../workspace:/app/workspace
+      - ../.zetora:/app/.zetora
+    environment:
+      - NODE_ENV=production
+      - ZETORA_LOG_LEVEL=info
+      - ZETORA_SESSION_SECRET=${ZETORA_SESSION_SECRET:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4173/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    # Run as the non-root zetora user (set in Dockerfile).
+    user: "zetora:zetora"
+
+  # ─── Test Runner (one-shot) ─────────────────────────────────────────────
+  test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: development
+    command: ["node", "--test", "tests/*.test.js"]
+    volumes:
+      - ../packages:/app/packages:ro
+      - ../apps:/app/apps:ro
+      - ../tests:/app/tests:ro
+    environment:
+      - NODE_ENV=test
+    profiles:
+      - test   # only runs with `docker compose --profile test run test`

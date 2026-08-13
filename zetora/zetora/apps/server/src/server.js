@@ -145,12 +145,30 @@ async function api(request, response, url) {
   const pathname = url.pathname;
 
   if (method === "GET" && pathname === "/api/health") {
+    // v0.9.1: enhanced health check with uptime, memory, and git status.
+    const mem = process.memoryUsage();
+    let gitStatus = null;
+    try { gitStatus = await git.status(); } catch { gitStatus = { repository: false }; }
     return json(response, 200, {
       ok: true,
       service: "zetora",
-      version: "0.9.0",
+      version: "0.9.1",
+      uptime: Math.round(process.uptime()),
       workspace: workspaceRoot,
       isDemoWorkspace: workspaceRoot === path.resolve(root, "workspace"),
+      memory: {
+        rssMb: Math.round(mem.rss / 1024 / 1024),
+        heapUsedMb: Math.round(mem.heapUsed / 1024 / 1024),
+        heapTotalMb: Math.round(mem.heapTotal / 1024 / 1024),
+      },
+      git: {
+        repository: gitStatus.repository,
+        head: gitStatus.head || null,
+        modifiedFiles: gitStatus.files?.filter((f) => !f.untracked).length || 0,
+        untrackedFiles: gitStatus.files?.filter((f) => f.untracked).length || 0,
+      },
+      sessions: ((await stateStore.read()).sessions || []).length,
+      approvalsPending: ((await stateStore.read()).approvals || []).filter((a) => a.status === "pending").length,
     });
   }
 
