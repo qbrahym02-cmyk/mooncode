@@ -1,0 +1,69 @@
+# Docker ignore — excludes everything not needed in the build context.
+# Keeps the image small and the build fast.
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Runtime data
+.mooncode/
+.mooncode-worktrees/
+
+# Git
+.git/
+.gitignore
+
+# Node
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Build artifacts
+dist/
+build/
+out/
+target/
+*.tsbuildinfo
+release/
+release-builds/
+
+# Desktop binaries
+*.dmg
+*.exe
+*.AppImage
+*.deb
+*.snap
+
+# Testing
+coverage/
+.nyc_output/
+test-results/
+*.lcov
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Docker
+docker/data/
+docker/workspace/
+
+# Docs (keep docs/ but ignore drafts)
+docs/*.draft.md
+
+# Logs
+logs/
+*.log
+
+# Temporary
+*.tmp
+*.bak
+*.cache
+.tmp/
+tmp/

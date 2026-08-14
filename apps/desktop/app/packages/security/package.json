@@ -1,0 +1,12 @@
+{
+  "name": "@mooncode/security",
+  "version": "0.9.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./audit": "./src/audit.js",
+    "./rate-limit": "./src/rate-limit.js",
+    "./secrets": "./src/secrets.js"
+  }
+}

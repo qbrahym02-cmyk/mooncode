@@ -1,0 +1,7 @@
+{
+  "name": "@mooncode/todos",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.js" }
+}
