@@ -1,0 +1,7 @@
+Analyze the codebase and suggest refactoring improvements:
+1. Find duplicated code patterns
+2. Identify overly complex functions
+3. Suggest better naming
+4. Recommend design pattern improvements
+
+Workspace: {workspace}

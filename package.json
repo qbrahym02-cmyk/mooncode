@@ -1,0 +1,32 @@
+{
+  "name": "mooncode",
+  "version": "1.4.0",
+  "private": true,
+  "description": "Local-first agentic workspace for code and design",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "node apps/server/src/server.js",
+    "dev:watch": "node --watch apps/server/src/server.js",
+    "start": "node apps/server/src/server.js",
+    "tui": "node apps/tui/src/cli.js",
+    "test": "node --test tests/*.test.js",
+    "check": "node --check apps/server/src/server.js && node --check apps/web/public/app.js && node --check apps/tui/src/cli.js",
+    "desktop": "npm --workspace @mooncode/desktop run start",
+    "ops": "node scripts/ops.mjs",
+    "env": "node scripts/ops.mjs env",
+    "env:validate": "node scripts/ops.mjs env:validate",
+    "health": "node scripts/ops.mjs health",
+    "release": "node scripts/ops.mjs release",
+    "docker:build": "node scripts/ops.mjs docker:build",
+    "docker:run": "node scripts/ops.mjs docker:run",
+    "docker:dev": "node scripts/ops.mjs docker:dev",
+    "clean": "node scripts/ops.mjs clean"
+  },
+  "engines": {
+    "node": ">=20.12"
+  }
+}

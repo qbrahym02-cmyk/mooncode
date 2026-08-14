@@ -1,0 +1,7 @@
+Run the project's test suite and analyze any failures:
+1. Detect the test runner (npm test, vitest, jest, pytest)
+2. Run tests with verbose output
+3. For each failure: analyze the error, suggest a fix
+4. Apply fixes only with user approval
+
+Workspace: {workspace}

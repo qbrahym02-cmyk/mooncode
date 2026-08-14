@@ -1,0 +1,7 @@
+Initialize this project with Moon Code conventions:
+1. Create .mooncode/config.json with sensible defaults
+2. Set up directory structure
+3. Add CONVENTIONS.md with coding standards
+4. Configure git hooks if applicable
+
+Workspace: {workspace}

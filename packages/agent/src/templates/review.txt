@@ -1,0 +1,8 @@
+Review all code changes in the workspace. Check for:
+1. Code quality and style issues
+2. Potential bugs or edge cases
+3. Security vulnerabilities
+4. Performance concerns
+5. Documentation gaps
+
+Use {workspace} as the project root. Report findings with file paths and line numbers.

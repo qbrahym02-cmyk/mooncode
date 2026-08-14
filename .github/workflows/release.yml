@@ -1,0 +1,194 @@
+# ════════════════════════════════════════════════════════════════════════════
+# Moon Code Release — builds REAL desktop apps (.exe, .dmg, .AppImage, .deb)
+# ════════════════════════════════════════════════════════════════════════════
+# Triggers when a tag matching v* is pushed.
+#
+# Builds:
+#   1. Desktop apps (Electron) — real installers:
+#      - Windows: NSIS .exe installer + portable .exe
+#      - macOS: .dmg (Intel + Apple Silicon)
+#      - Linux: .AppImage + .deb
+#   2. CLI bundles (tar.gz/zip) for terminal users
+#
+# Uploads all artifacts to the GitHub Release.
+# ════════════════════════════════════════════════════════════════════════════
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ─── Desktop Apps (Electron) — REAL installers ────────────────────────────
+  build-desktop:
+    name: Desktop (${{ matrix.os }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos
+            runner: macos-14
+            target: --mac
+          - os: windows
+            runner: windows-latest
+            target: --win
+          - os: linux
+            runner: ubuntu-latest
+            target: --linux
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install wine (Linux only, for NSIS installer)
+        if: matrix.os == 'linux'
+        shell: bash
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y wine64 wine32
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          cd apps/desktop
+          # Install electron and electron-builder WITHOUT resolving workspaces
+          npm install --no-workspaces 2>&1 | tail -10
+          echo "---installed---"
+          ls node_modules/.bin/ 2>/dev/null | head -10 || echo "no .bin"
+
+      - name: Prepare app (copy sources into app/)
+        shell: bash
+        run: |
+          cd apps/desktop
+          node prepare.mjs
+
+      - name: Build with electron-builder
+        shell: bash
+        run: |
+          cd apps/desktop
+          # Build all targets for this OS.
+          # On Linux, wine is needed for NSIS (Windows installer).
+          # On macOS, sips is available for .dmg.
+          npx electron-builder ${{ matrix.target }} --publish never 2>&1 | tail -30
+          echo "---build output---"
+          ls -lh dist/ 2>/dev/null || echo "No dist output"
+
+      - name: Build NSIS installer separately (Linux with wine)
+        if: matrix.os == 'linux'
+        shell: bash
+        run: |
+          cd apps/desktop
+          # Also build Windows NSIS installer using wine on Linux.
+          # This produces a real installer with install screen.
+          npx electron-builder --win nsis --publish never 2>&1 | tail -20 || echo "NSIS build failed (non-fatal)"
+          ls -lh dist/*.exe 2>/dev/null || true
+
+      - name: List artifacts
+        shell: bash
+        run: |
+          echo "=== Artifacts for ${{ matrix.os }} ==="
+          find apps/desktop/dist -type f -exec ls -lh {} \; 2>/dev/null || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: |
+            apps/desktop/dist/*.exe
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.AppImage
+            apps/desktop/dist/*.deb
+            apps/desktop/dist/*.zip
+            apps/desktop/dist/*.tar.gz
+          if-no-files-found: warn
+
+      - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            apps/desktop/dist/*.exe
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.AppImage
+            apps/desktop/dist/*.deb
+            apps/desktop/dist/*.zip
+            apps/desktop/dist/*.tar.gz
+
+  # ─── CLI Bundles (for terminal users) ────────────────────────────────────
+  build-cli:
+    name: CLI (${{ matrix.os }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-arm64
+            runner: macos-14
+          - os: linux-x64
+            runner: ubuntu-latest
+          - os: windows-x64
+            runner: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Extract version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          else
+            echo "version=1.2.0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Bundle CLI
+        shell: bash
+        run: |
+          set -e
+          mkdir -p dist
+          VERSION="${{ steps.version.outputs.version }}"
+          ASSET_NAME="mooncode-${VERSION}-${{ matrix.os }}"
+          mkdir -p "${ASSET_NAME}/apps"
+          cp -r apps/cli/src "${ASSET_NAME}/cli-src"
+          cp -r packages "${ASSET_NAME}/packages"
+          cp -r apps/server "${ASSET_NAME}/apps/server"
+          cp -r apps/tui "${ASSET_NAME}/apps/tui"
+          cp -r apps/web "${ASSET_NAME}/apps/web"
+          cp package.json "${ASSET_NAME}/"
+          cp .env.example "${ASSET_NAME}/" 2>/dev/null || true
+          cp brand.json "${ASSET_NAME}/" 2>/dev/null || true
+          mkdir -p "${ASSET_NAME}/apps/cli"
+          mv "${ASSET_NAME}/cli-src" "${ASSET_NAME}/apps/cli/src"
+
+          if [[ "${{ matrix.os }}" == windows-* ]]; then
+            printf '@echo off\r\nnode "%%~dp0apps\\cli\\src\\cli.js" %%*\r\n' > "${ASSET_NAME}/mooncode.cmd"
+            7z a -tzip "dist/${ASSET_NAME}.zip" "${ASSET_NAME}"
+          else
+            printf '#!/usr/bin/env bash\nDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\nexec node "$DIR/apps/cli/src/cli.js" "$@"\n' > "${ASSET_NAME}/mooncode"
+            chmod +x "${ASSET_NAME}/mooncode"
+            tar -czf "dist/${ASSET_NAME}.tar.gz" "${ASSET_NAME}"
+          fi
+          ls -lh dist/
+
+      - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*

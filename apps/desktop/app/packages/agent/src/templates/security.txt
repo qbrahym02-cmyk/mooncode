@@ -1,0 +1,8 @@
+Perform a security audit:
+1. Check for hardcoded secrets
+2. Scan dependencies for known vulnerabilities
+3. Review input validation
+4. Check authentication/authorization
+5. Review file permission handling
+
+Workspace: {workspace}
