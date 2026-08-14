@@ -6,5 +6,5 @@ export const PRODUCT = Object.freeze({
   id: "mooncode",
   name: "Moon Code",
   protocolVersion: 4,
-  version: "4.2.1",
+  version: "4.2.2",
 });
