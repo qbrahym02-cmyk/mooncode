@@ -31,18 +31,26 @@ function logError(...args) {
 
 // ─── Server lifecycle ───────────────────────────────────────────────────────
 function getServerEntry() {
-  // In production (packaged), the server is bundled as extraResource.
-  // In dev, it's in the parent monorepo.
+  // The app structure after `prepare.mjs` is:
+  //   app/src/main.cjs       (this file)
+  //   app/server/src/server.js
+  //   app/packages/...
+  //   app/web/public/...
+  // In dev (no prepare), the structure is:
+  //   apps/desktop/src/main.cjs  (this file)
+  //   apps/server/src/server.js
+  //   packages/...
   const candidates = [
-    path.resolve(__dirname, '../../server/src/server.js'),       // dev monorepo
-    path.resolve(__dirname, '../../../apps/server/src/server.js'), // packaged relative
-    path.join(process.resourcesPath, 'apps/server/src/server.js'), // extraResources
+    path.resolve(__dirname, '../server/src/server.js'),           // packaged (app/server/src)
+    path.resolve(__dirname, '../../server/src/server.js'),         // dev monorepo (apps/server/src)
+    path.resolve(__dirname, '../../../apps/server/src/server.js'), // alt dev
+    path.join(process.resourcesPath, 'app/server/src/server.js'),  // extraResources fallback
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) return candidate;
   }
   logError('Could not find server entry. Tried:', candidates);
-  return candidates[0]; // return first as fallback (will fail with clear error)
+  return candidates[0];
 }
 
 function startLocalServer() {
