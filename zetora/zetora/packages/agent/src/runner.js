@@ -30,7 +30,7 @@ async function emitText(emit, runId, text) {
 }
 
 export class AgentRunner {
-  constructor({ workspace, approvalStore, eventStore, git = null, contextFiles = null, compactor = null, mcpRegistry = null, skills = null, designTokens = null, autoFix = null, searchIndex = null, todoList = null, env = process.env }) {
+  constructor({ workspace, approvalStore, eventStore, git = null, contextFiles = null, compactor = null, mcpRegistry = null, skills = null, designTokens = null, autoFix = null, searchIndex = null, todoList = null, pluginLoader = null, env = process.env }) {
     this.workspace = workspace;
     this.approvalStore = approvalStore;
     this.eventStore = eventStore || null;
@@ -43,11 +43,14 @@ export class AgentRunner {
     this.autoFix = autoFix;
     this.searchIndex = searchIndex;
     this.todoList = todoList;
+    this.pluginLoader = pluginLoader || null; // v4.1: Plugin SDK integration
     this.env = env;
     this.pending = new Map();
     this.mcpToolsCache = null;
     this.mcpToolsCacheAt = 0;
     this.#currentParentProvider = null;
+    // v4.1: Initialize PermissionManager (replaces Risk enum for tool calls)
+    this.permissions = new PermissionManager();
   }
 
   /** @type {{ provider?: string, model?: string, apiKey?: string, baseUrl?: string } | null} */
@@ -462,12 +465,32 @@ export class AgentRunner {
         for (const call of response.toolCalls) {
           const isMcp = call.name.startsWith("mcp.");
           const isSkill = call.name === "invoke_skill";
+
+          // v4.1: Use PermissionManager for fine-grained permission checks.
+          // Falls back to Risk enum for backward compatibility.
+          const { permission, path: permPath } = riskToPermission(call.name, call.input || {});
+          const permAction = this.permissions.check(permission, permPath);
           const risk = isMcp || isSkill ? Risk.EXTERNAL : toolRisk(call.name);
-          emit(createEvent(EventType.TOOL_STARTED, { runId, callId: call.id, name: call.name, input: call.input, risk }));
-          // MCP tools and skill invocations are external — always require approval.
-          const result = isMcp || isSkill
-            ? { approvalRequired: true, risk }
-            : await this.executeTool(call, false);
+
+          // v4.1: Fire plugin hook: tool.execute.before
+          if (this.pluginLoader) {
+            await this.pluginLoader.runHook("tool.execute.before", call.name, call.input).catch(() => {});
+          }
+
+          emit(createEvent(EventType.TOOL_STARTED, { runId, callId: call.id, name: call.name, input: call.input, risk, permission: { permission, path: permPath, action: permAction } }));
+
+          // v4.1: PermissionManager decides: allow → run, deny → throw, ask → approval
+          let result;
+          if (permAction === "allow" && !isMcp && !isSkill) {
+            result = await this.executeTool(call, true); // approved=true
+          } else if (permAction === "deny") {
+            result = { error: `Permission denied: ${permission} ${permPath}`, denied: true };
+          } else {
+            // "ask" or MCP/skill — require approval
+            result = isMcp || isSkill
+              ? { approvalRequired: true, risk }
+              : await this.executeTool(call, false);
+          }
           if (result?.approvalRequired) {
             const approval = {
               id: crypto.randomUUID(),
@@ -497,8 +520,18 @@ export class AgentRunner {
             continue;
           }
           emit(createEvent(EventType.TOOL_FINISHED, { runId, callId: call.id, name: call.name, result }));
+
+          // v4.1: Fire plugin hook: tool.execute.after
+          if (this.pluginLoader) {
+            await this.pluginLoader.runHook("tool.execute.after", call.name, call.input, result).catch(() => {});
+          }
+
           messages.push({ role: "user", content: `Tool ${call.name} returned:\n${serialize(result)}\nContinue the task using this verified result.` });
         }
+      }
+      // v4.1: Fire plugin hook: chat.message (after assistant turn)
+      if (this.pluginLoader) {
+        await this.pluginLoader.runHook("chat.message", { role: "assistant", content: finalText }).catch(() => {});
       }
       emit(createEvent(EventType.RUN_FINISHED, { runId, status: "completed", usage, cost: cumulativeCost }));
       return { runId, status: "completed", text: finalText, usage, cost: cumulativeCost, messages };

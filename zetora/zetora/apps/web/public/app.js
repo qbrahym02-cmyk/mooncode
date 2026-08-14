@@ -1455,3 +1455,105 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// v4.1: Wire up update banner + default tab + theme picker
+// ════════════════════════════════════════════════════════════════════════════
+
+// ─── Update banner (Electron IPC + web fallback) ───
+(function initUpdateBanner() {
+  const banner = document.getElementById('update-banner');
+  const title = document.getElementById('update-title');
+  const detail = document.getElementById('update-detail');
+  if (!banner) return;
+
+  function showUpdate(version, url) {
+    if (title) title.textContent = `Update Available — v${version}`;
+    if (detail) detail.textContent = 'Click to download the new version.';
+    banner.hidden = false;
+    if (url) banner.dataset.releaseUrl = url;
+  }
+
+  // Check via Electron IPC
+  if (window.electronAPI?.checkForUpdates) {
+    window.electronAPI.checkForUpdates().then(result => {
+      if (result?.updateAvailable) showUpdate(result.version, result.releaseUrl);
+    }).catch(() => {});
+    // Listen for push events
+    if (window.electronAPI?.onUpdateAvailable) {
+      window.electronAPI.onUpdateAvailable((event, info) => showUpdate(info.version, info.releaseUrl));
+    }
+  } else {
+    // Web fallback: check GitHub API
+    fetch('https://api.github.com/repos/qbrahym02-cmyk/mooncode/releases/latest')
+      .then(r => r.json())
+      .then(release => {
+        const latest = (release.tag_name || '').replace(/^v/, '');
+        const current = '4.1.0';
+        const pa = latest.split('.').map(Number);
+        const pb = current.split('.').map(Number);
+        for (let i = 0; i < 3; i++) {
+          if ((pa[i] || 0) > (pb[i] || 0)) { showUpdate(latest, release.html_url); break; }
+          if ((pa[i] || 0) < (pb[i] || 0)) break;
+        }
+      }).catch(() => {});
+  }
+
+  window.installUpdate = function() {
+    if (window.electronAPI?.installUpdate) {
+      window.electronAPI.installUpdate();
+    } else {
+      const url = banner.dataset.releaseUrl || 'https://github.com/qbrahym02-cmyk/mooncode/releases/latest';
+      window.open(url, '_blank');
+    }
+  };
+  window.dismissUpdate = function() { banner.hidden = true; };
+})();
+
+// ─── Default tab on load ───
+(function initDefaultTab() {
+  if (typeof openTab === 'function') {
+    // Open a default tab for the current session on load
+    const sessionId = document.querySelector('[data-session-id]')?.dataset.sessionId || 'default';
+    openTab(sessionId, 'Current Session');
+  }
+})();
+
+// ─── Theme picker in settings ───
+(async function initThemePicker() {
+  try {
+    const res = await fetch('/api/themes');
+    const data = await res.json();
+    const themes = data.themes || [];
+    if (themes.length === 0) return;
+
+    // Find the settings panel for appearance
+    const settingsPanel = document.querySelector('[data-settings-panel="appearance"]');
+    if (!settingsPanel) return;
+
+    const themeGrid = document.createElement('div');
+    themeGrid.className = 'theme-grid';
+    themeGrid.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;';
+
+    for (const theme of themes) {
+      const btn = document.createElement('button');
+      btn.className = 'theme-option';
+      btn.style.cssText = 'padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--text-2);font-size:11px;cursor:pointer;text-align:center;';
+      btn.textContent = theme.name;
+      btn.onclick = () => {
+        document.documentElement.setAttribute('data-theme', theme.id);
+        localStorage.setItem('mooncode-theme', theme.id);
+        // Reload to apply
+        location.reload();
+      };
+      themeGrid.appendChild(btn);
+    }
+    settingsPanel.appendChild(themeGrid);
+  } catch {}
+})();
+
+// ─── Apply saved theme on load ───
+(function applySavedTheme() {
+  const saved = localStorage.getItem('mooncode-theme');
+  if (saved) document.documentElement.setAttribute('data-theme', saved);
+})();

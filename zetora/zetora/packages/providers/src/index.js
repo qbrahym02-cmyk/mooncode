@@ -50,9 +50,9 @@ const PROVIDERS = Object.freeze({
   ollama: { label: "Ollama", defaultModel: "qwen3-coder", env: null, baseUrl: "http://127.0.0.1:11434", kind: "ollama" },
   // v3.0.0: new providers
   azure: { label: "Azure OpenAI", defaultModel: "gpt-4o", env: "AZURE_API_KEY", kind: "openai" },
-  bedrock: { label: "AWS Bedrock", defaultModel: "anthropic.claude-sonnet-4-5", env: "AWS_ACCESS_KEY_ID", kind: "openai" },
+  bedrock: { label: "AWS Bedrock", defaultModel: "anthropic.claude-sonnet-4-5", env: "AWS_ACCESS_KEY_ID", kind: "anthropic", note: "Uses Anthropic-compatible endpoint via Bedrock" },
   xai: { label: "xAI (Grok)", defaultModel: "grok-3", env: "XAI_API_KEY", baseUrl: "https://api.x.ai/v1", kind: "openai" },
-  cloudflare: { label: "Cloudflare AI", defaultModel: "@cf/meta/llama-3.1-70b-instruct", env: "CLOUDFLARE_API_KEY", kind: "openai" },
+  cloudflare: { label: "Cloudflare AI", defaultModel: "@cf/meta/llama-3.1-70b-instruct", env: "CLOUDFLARE_API_KEY", baseUrl: "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai", kind: "openai", note: "Requires CLOUDFLARE_ACCOUNT_ID" },
   mistral: { label: "Mistral AI", defaultModel: "mistral-large-latest", env: "MISTRAL_API_KEY", baseUrl: "https://api.mistral.ai/v1", kind: "openai" },
   groq: { label: "Groq", defaultModel: "llama-3.3-70b-versatile", env: "GROQ_API_KEY", baseUrl: "https://api.groq.com/openai/v1", kind: "openai" },
   deepseek: { label: "DeepSeek", defaultModel: "deepseek-coder", env: "DEEPSEEK_API_KEY", baseUrl: "https://api.deepseek.com/v1", kind: "openai" },

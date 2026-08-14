@@ -12,6 +12,20 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body>
+  <!-- v4.1: Update notification banner -->
+  <div id="update-banner" class="update-banner" hidden>
+    <div class="update-banner-content">
+      <span class="update-icon">⚡</span>
+      <div class="update-text">
+        <strong id="update-title">Update Available</strong>
+        <span id="update-detail">A new version of Moon Code is ready.</span>
+      </div>
+      <div class="update-actions">
+        <button id="update-btn" class="update-btn" onclick="installUpdate()">Update Now</button>
+        <button class="update-dismiss" onclick="dismissUpdate()">×</button>
+      </div>
+    </div>
+  </div>
   <div id="app" class="app-shell" data-inspector="true" data-sidebar="true">
     <!-- v3.2.0: Tab bar for multi-session -->
     <div id="tab-bar" style="position:fixed;top:0;left:56px;right:0;z-index:50;"></div>
