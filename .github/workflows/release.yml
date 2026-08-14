@@ -54,11 +54,12 @@ jobs:
         shell: bash
         run: |
           cd apps/desktop
-          # Install electron and electron-builder (with scripts, so the
-          # electron binary downloads correctly).
-          npm install 2>&1 | tail -10
+          # Install electron and electron-builder WITHOUT resolving workspaces
+          # (the root package.json declares apps/* as workspaces, which confuses
+          # npm when we cd into apps/desktop). --no-workspaces fixes this.
+          npm install --no-workspaces 2>&1 | tail -10
           echo "---installed---"
-          ls node_modules/.bin/ | head -10
+          ls node_modules/.bin/ 2>/dev/null | head -10 || echo "no .bin"
 
       - name: Prepare app (copy sources into app/)
         shell: bash
