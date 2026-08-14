@@ -1,0 +1,8 @@
+Prepare this project for deployment:
+1. Check for environment variable requirements
+2. Verify build process
+3. Create deployment configuration
+4. Set up health checks
+5. Configure monitoring
+
+Workspace: {workspace}

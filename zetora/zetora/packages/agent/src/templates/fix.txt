@@ -1,0 +1,7 @@
+Scan the workspace for common issues and fix them:
+1. Run auto-fix on all supported files
+2. Check for trailing whitespace, missing newlines
+3. Validate JSON files
+4. Run ESLint/Prettier if available
+
+Workspace: {workspace}
