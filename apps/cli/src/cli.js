@@ -28,7 +28,7 @@ import os from "node:os";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const VERSION = "1.2.0";
+const VERSION = "1.2.1";
 const DEFAULT_PORT = 4173;
 
 // ANSI colors for pretty output (disabled on Windows non-TTY).
