@@ -25,6 +25,8 @@ const PROMPT_MAP = {
   "kimi": "kimi.txt",
   // Codex
   "codex": "codex.txt",
+  "trinity": "trinity.txt",
+  "meta": "meta.txt",
 };
 
 const promptCache = new Map();

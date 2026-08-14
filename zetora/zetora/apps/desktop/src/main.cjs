@@ -15,6 +15,8 @@ const fs = require('node:fs');
 let server = null;
 let mainWindow = null;
 let tray = null;
+// v3.4.0: Multi-window support — window registry
+const windows = new Map(); // windowId → BrowserWindow
 const port = process.env.MOONCODE_DESKTOP_PORT || '4173';
 const isDev = !!process.env.MOONCODE_DESKTOP_DEV;
 const isMac = process.platform === 'darwin';
@@ -381,6 +383,25 @@ app.on('before-quit', async (event) => {
     app.exit(0);
   }
 });
+
+// v3.4.0: Multi-window — create additional windows
+ipcMain.handle('window-create', async (event, options = {}) => {
+  const windowId = `win_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const url = `http://127.0.0.1:${port}${options.path || '/'}`;
+  const newWindow = new BrowserWindow({
+    width: options.width || 1200, height: options.height || 800,
+    titleBarStyle: isMac ? 'hiddenInset' : 'default', backgroundColor: '#090a0c', show: false,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: false, spellcheck: true, devTools: isDev, preload: path.join(__dirname, 'preload.cjs') },
+  });
+  windows.set(windowId, newWindow);
+  newWindow.once('ready-to-show', () => newWindow.show());
+  await newWindow.loadURL(url);
+  log(`Window created: ${windowId}`);
+  return { windowId };
+});
+ipcMain.handle('window-list', () => [...windows.keys()].map((id) => ({ id, title: windows.get(id).getTitle() })));
+ipcMain.handle('window-close', (event, windowId) => { const w = windows.get(windowId); if (w) { w.close(); windows.delete(windowId); return { ok: true }; } return { ok: false }; });
+ipcMain.handle('window-focus', (event, windowId) => { const w = windows.get(windowId); if (w) { w.show(); w.focus(); return { ok: true }; } return { ok: false }; });
 
 // v3.0.0: Deep links — mooncode:// protocol
 // Supports: mooncode://session/<id>, mooncode://open/<path>, mooncode://settings
