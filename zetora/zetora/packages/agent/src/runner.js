@@ -1,6 +1,11 @@
 import { createEvent, EventType, Risk, toolRisk } from "../../kernel/src/index.js";
 import { callModel, estimateCost } from "../../providers/src/index.js";
 import { TOOL_DEFINITIONS } from "../../tools/src/catalog.js";
+// v4.0.0: import new integrated systems
+import { BUILTIN_AGENTS, getAgent, filterToolsForAgent } from "./agents.js";
+import { getSystemPromptForModel } from "./prompt-selector.js";
+import { PermissionManager, riskToPermission } from "../../kernel/src/permissions.js";
+import { compactConversation, needsCompaction, countConversationTokens } from "../../context/src/token-counter.js";
 
 const SYSTEM_PROMPT = `You are Moon Code, a careful code and design agent working inside one local project.
 
@@ -90,7 +95,26 @@ export class AgentRunner {
    * design tokens (in design mode), and skill descriptions when available.
    */
   async #buildSystemPrompt(input) {
-    const parts = [SYSTEM_PROMPT];
+    // v4.0.0: Use per-model system prompt if available, else agent prompt, else default.
+    let basePrompt = SYSTEM_PROMPT;
+
+    // If an agent is specified, use its system prompt
+    if (input.agentId) {
+      const agent = getAgent(input.agentId);
+      if (agent?.systemPrompt) {
+        basePrompt = agent.systemPrompt;
+      }
+    } else {
+      // Try per-model prompt selector
+      try {
+        const modelPrompt = await getSystemPromptForModel(input.model);
+        if (modelPrompt && modelPrompt.length > 50) {
+          basePrompt = modelPrompt;
+        }
+      } catch {}
+    }
+
+    const parts = [basePrompt];
     if (this.contextFiles) {
       const assembled = await this.contextFiles.assemble().catch(() => null);
       if (assembled) parts.push(assembled);
@@ -326,7 +350,6 @@ export class AgentRunner {
     const promptContent = Array.isArray(prompt) ? prompt : String(prompt || "");
     const systemPrompt = await this.#buildSystemPrompt(input);
     // Save the parent provider config so #spawnSubagent can inherit it.
-    // Only set if not already set (avoid a sub-agent overwriting its parent's).
     if (!this.#currentParentProvider) {
       this.#currentParentProvider = {
         provider: input.provider,
@@ -341,8 +364,40 @@ export class AgentRunner {
       { role: "user", content: promptContent },
     ];
 
-    // Apply compaction before the first model call if the history is long.
-    if (this.compactor && this.compactor.needsCompaction(messages)) {
+    // v4.0.0: Use token-based compaction (more accurate than message-count).
+    // Falls back to the old Compactor if token-counter isn't available.
+    if (needsCompaction && needsCompaction(messages)) {
+      try {
+        const compactedResult = await compactConversation(messages, async (oldMessages) => {
+          // Use the old Compactor for LLM summarization if available
+          if (this.compactor) {
+            const result = await this.compactor.compact(oldMessages, {
+              provider: input.provider, model: input.model, apiKey: input.apiKey, baseUrl: input.baseUrl, env: this.env,
+            });
+            return result.summary || JSON.stringify(result);
+          }
+          // Fallback: mechanical summary
+          const tokens = countConversationTokens(oldMessages);
+          return `Previous conversation (${oldMessages.length} messages, ~${tokens} tokens) was compacted.`;
+        });
+        if (compactedResult.compacted) {
+          messages.splice(0, messages.length, ...compactedResult.messages);
+          emit(createEvent(EventType.CONTEXT_COMPACTED, { runId, summary: compactedResult.summary, compactedCount: compactedResult.compactedCount, tokensBefore: compactedResult.tokensBefore, tokensAfter: compactedResult.tokensAfter }));
+        }
+      } catch (error) {
+        // Fallback to old compactor on error
+        if (this.compactor && this.compactor.needsCompaction(messages)) {
+          const compacted = await this.compactor.compact(messages, {
+            provider: input.provider, model: input.model, apiKey: input.apiKey, baseUrl: input.baseUrl, env: this.env,
+          });
+          if (compacted.compacted) {
+            messages.splice(0, messages.length, ...compacted.messages);
+            emit(createEvent(EventType.CONTEXT_COMPACTED, { runId, summary: compacted.summary, compactedCount: compacted.compactedCount }));
+          }
+        }
+      }
+    } else if (this.compactor && this.compactor.needsCompaction(messages)) {
+      // Old compactor fallback (if token-counter not imported properly)
       const compacted = await this.compactor.compact(messages, {
         provider: input.provider, model: input.model, apiKey: input.apiKey, baseUrl: input.baseUrl, env: this.env,
       });
@@ -354,7 +409,16 @@ export class AgentRunner {
 
     // Collect MCP tools to expose alongside native tools this turn.
     const mcpTools = await this.#collectMcpTools();
-    const tools = [...TOOL_DEFINITIONS, ...mcpTools];
+    let tools = [...TOOL_DEFINITIONS, ...mcpTools];
+
+    // v4.0.0: If an agent is specified, filter tools based on agent config.
+    if (input.agentId) {
+      const agent = getAgent(input.agentId);
+      if (agent) {
+        tools = filterToolsForAgent(agent, tools);
+        emit(createEvent(EventType.RUN_STARTED, { runId, provider: input.provider, model: input.model, agent: agent.id }));
+      }
+    }
 
     emit(createEvent(EventType.RUN_STARTED, { runId, provider: input.provider, model: input.model }));
     let finalText = "";

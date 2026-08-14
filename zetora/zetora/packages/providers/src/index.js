@@ -109,6 +109,14 @@ export async function callModel(options, request, env = process.env) {
     throw new ProviderError(`API key is not configured for ${preset.label}`, 400);
   }
 
+  // v4.0.0: Try native runtime first (bypasses AI SDK for direct HTTP).
+  // Returns null if disabled, falling through to normal adapters.
+  try {
+    const { nativeCallModel } = await import("./native-runtime.js");
+    const nativeResult = await nativeCallModel(config, request, env);
+    if (nativeResult) return nativeResult;
+  } catch {}
+
   // Route to the correct adapter based on the provider kind.
   switch (preset.kind) {
     case "anthropic": return callAnthropic(config, request);

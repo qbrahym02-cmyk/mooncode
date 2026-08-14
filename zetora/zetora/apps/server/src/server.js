@@ -245,15 +245,21 @@ async function api(request, response, url) {
     return json(response, 200, forked);
   }
 
-  // v3.2.0: Share link endpoint.
+  // v3.2.0: Share link endpoint — v4.0.0: now persists to stateStore.
   if (method === "POST" && pathname === "/api/session/share") {
-    const body = await body(request);
-    const { sessionId } = body;
+    const shareBody = await body(request);
+    const { sessionId } = shareBody;
     const { createShareLink } = await import("../../packages/session/src/index.js");
     const state = await stateStore.read();
     const session = (state.sessions || []).find((s) => s.id === sessionId);
     if (!session) return json(response, 404, { error: "Session not found" });
     const share = await createShareLink(sessionId, session);
+    // v4.0.0: Persist the share so it can be viewed later.
+    await stateStore.update((s) => {
+      if (!s.shares) s.shares = [];
+      s.shares.push(share);
+      return s;
+    });
     return json(response, 200, share);
   }
 
@@ -277,6 +283,46 @@ async function api(request, response, url) {
   if (method === "GET" && pathname === "/api/themes") {
     const { getThemeList } = await import("../../packages/design/src/themes.js");
     return json(response, 200, { themes: getThemeList() });
+  }
+
+  // v4.0.0: Agents list endpoint.
+  if (method === "GET" && pathname === "/api/agents") {
+    const { BUILTIN_AGENTS } = await import("../../packages/agent/src/agents.js");
+    return json(response, 200, { agents: BUILTIN_AGENTS.filter((a) => a.mode !== "hidden") });
+  }
+
+  // v4.0.0: Slash commands list.
+  if (method === "GET" && pathname === "/api/commands") {
+    const { listCommands } = await import("../../packages/agent/src/commands.js");
+    return json(response, 200, { commands: listCommands() });
+  }
+
+  // v4.0.0: Execute a slash command.
+  if (method === "POST" && pathname === "/api/commands/execute") {
+    const reqBody = await body(request);
+    const { executeCommand } = await import("../../packages/agent/src/commands.js");
+    const result = await executeCommand(reqBody.name, reqBody.context || {});
+    return json(response, 200, result);
+  }
+
+  // v4.0.0: View a shared session.
+  if (method === "GET" && pathname.startsWith("/api/share/")) {
+    const shareId = pathname.replace("/api/share/", "");
+    const state = await stateStore.read();
+    const share = (state.shares || []).find((s) => s.id === shareId);
+    if (!share) return json(response, 404, { error: "Share not found" });
+    return json(response, 200, share);
+  }
+
+  // v4.0.0: Models.dev catalog.
+  if (method === "GET" && pathname === "/api/models/catalog") {
+    try {
+      const { fetchModelsCatalog } = await import("../../packages/providers/src/models-dev.js");
+      const catalog = await fetchModelsCatalog();
+      return json(response, 200, { models: catalog });
+    } catch (error) {
+      return json(response, 200, { models: [], error: error.message });
+    }
   }
   if (method === "GET" && pathname === "/api/updates/check") {
     try {

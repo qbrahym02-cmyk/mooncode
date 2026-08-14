@@ -5,6 +5,6 @@ export * from "./permissions.js";
 export const PRODUCT = Object.freeze({
   id: "mooncode",
   name: "Moon Code",
-  protocolVersion: 3,
-  version: "3.5.0",
+  protocolVersion: 4,
+  version: "4.0.0",
 });

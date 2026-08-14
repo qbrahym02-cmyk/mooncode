@@ -7,7 +7,7 @@
 // sandbox on, spellcheck on.
 // ════════════════════════════════════════════════════════════════════════════
 
-const { app, BrowserWindow, shell, Menu, dialog, Tray, nativeImage } = require('electron');
+const { app, BrowserWindow, shell, Menu, dialog, Tray, nativeImage, ipcMain, Notification } = require('electron');
 const { fork } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -188,9 +188,10 @@ async function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      sandbox: false,
       spellcheck: true,
       devTools: isDev,
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   });
 
@@ -220,6 +221,15 @@ async function createWindow() {
 
   await mainWindow.loadURL(url);
   log('Window loaded');
+
+  // v4.0.0: Check for updates 3 seconds after launch.
+  setTimeout(() => {
+    ipcMain.emit('check-for-updates');
+  }, 3000);
+  // Check every 30 minutes.
+  setInterval(() => {
+    ipcMain.emit('check-for-updates');
+  }, 30 * 60 * 1000).unref();
 }
 
 function getIconPath() {
@@ -402,6 +412,67 @@ ipcMain.handle('window-create', async (event, options = {}) => {
 ipcMain.handle('window-list', () => [...windows.keys()].map((id) => ({ id, title: windows.get(id).getTitle() })));
 ipcMain.handle('window-close', (event, windowId) => { const w = windows.get(windowId); if (w) { w.close(); windows.delete(windowId); return { ok: true }; } return { ok: false }; });
 ipcMain.handle('window-focus', (event, windowId) => { const w = windows.get(windowId); if (w) { w.show(); w.focus(); return { ok: true }; } return { ok: false }; });
+
+// ─── Auto-updater IPC handlers ──────────────────────────────────────────────
+// v4.0.0: properly wired auto-updater using the packages/updater module.
+let updaterInitialized = false;
+
+async function initUpdater() {
+  if (updaterInitialized) return;
+  updaterInitialized = true;
+  try {
+    const { checkForUpdates } = await import(path.join(process.resourcesPath || __dirname, '..', '..', 'packages', 'updater', 'src', 'index.js').replace(/\\/g, '/'));
+    globalThis._mooncodeCheckUpdates = checkForUpdates;
+  } catch (error) {
+    logError('Could not load updater:', error.message);
+  }
+}
+
+ipcMain.handle('check-for-updates', async () => {
+  try {
+    if (globalThis._mooncodeCheckUpdates) {
+      const currentVersion = app.getVersion();
+      const result = await globalThis._mooncodeCheckUpdates(currentVersion);
+      if (result && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-available', { version: result.version });
+      }
+      return { ok: true, updateAvailable: Boolean(result), version: result?.version || null };
+    }
+    // Fallback: check GitHub API directly
+    const res = await fetch('https://api.github.com/repos/qbrahym02-cmyk/mooncode/releases/latest', {
+      headers: { 'user-agent': 'mooncode-desktop' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return { ok: false, reason: 'GitHub API error' };
+    const release = await res.json();
+    const latest = (release.tag_name || '').replace(/^v/, '');
+    const current = app.getVersion();
+    const pa = latest.split('.').map(Number);
+    const pb = current.split('.').map(Number);
+    let newer = false;
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) > (pb[i] || 0)) { newer = true; break; }
+      if ((pa[i] || 0) < (pb[i] || 0)) break;
+    }
+    if (newer && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-available', { version: latest, releaseUrl: release.html_url });
+      if (Notification.isSupported()) {
+        new Notification({ title: 'Moon Code — Update Available', body: `Version ${latest} is available.`, silent: true }).show();
+      }
+    }
+    return { ok: true, updateAvailable: newer, version: latest, releaseUrl: release.html_url };
+  } catch (error) {
+    return { ok: false, reason: error.message };
+  }
+});
+
+ipcMain.handle('install-update', async () => {
+  // Open the release page in the browser for manual download
+  shell.openExternal('https://github.com/qbrahym02-cmyk/mooncode/releases/latest');
+  return { ok: true };
+});
+
+ipcMain.handle('get-version', () => app.getVersion());
 
 // v3.0.0: Deep links — mooncode:// protocol
 // Supports: mooncode://session/<id>, mooncode://open/<path>, mooncode://settings

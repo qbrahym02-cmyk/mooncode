@@ -1,0 +1,1156 @@
+     1→import http from "node:http";
+     2→import { writeFile, mkdir } from "node:fs/promises";
+     3→import { existsSync } from "node:fs";
+     4→import path from "node:path";
+     5→import { fileURLToPath } from "node:url";
+     6→import os from "node:os";
+     7→import { AgentRunner } from "../../../packages/agent/src/index.js";
+     8→import { providerCatalog, callModel } from "../../../packages/providers/src/index.js";
+     9→import { JsonStore } from "../../../packages/storage/src/index.js";
+    10→import { Workspace } from "../../../packages/tools/src/index.js";
+    11→import { Git } from "../../../packages/git/src/index.js";
+    12→import { PtyRegistry } from "../../../packages/pty/src/index.js";
+    13→import { FileWatcher } from "../../../packages/watcher/src/index.js";
+    14→import { renderArtifact, detectKind } from "../../../packages/artifacts/src/index.js";
+    15→import { ContextFiles, Compactor } from "../../../packages/context/src/index.js";
+    16→import { McpRegistry } from "../../../packages/mcp/src/index.js";
+    17→import { SkillRegistry, BUILTIN_SKILLS } from "../../../packages/skills/src/index.js";
+    18→import { DesignTokens } from "../../../packages/design/src/index.js";
+    19→import { AutoFix, diagnoseError } from "../../../packages/autofix/src/index.js";
+    20→import { SearchIndex } from "../../../packages/search-index/src/index.js";
+    21→import { TodoList } from "../../../packages/todos/src/index.js";
+    22→import { LspDiagnostics } from "../../../packages/lsp/src/index.js";
+    23→import { PluginRegistry } from "../../../packages/plugins/src/index.js";
+    24→import { CollabRegistry, CollabSession } from "../../../packages/collab/src/index.js";
+    25→import { PluginSigner, TrustRegistry } from "../../../packages/security/src/index.js";
+    26→import { AuditLog } from "../../../packages/security/src/audit.js";
+    27→import { RateLimiter, applyRateLimit } from "../../../packages/security/src/rate-limit.js";
+    28→import { redactSecrets } from "../../../packages/security/src/secrets.js";
+    29→// v0.9.1: extracted helpers into lib.js to reduce server.js size.
+    30→import {
+    31→  json, body, serveStatic,
+    32→  persistSessionEvent as persistSessionEventImpl,
+    33→  recordMessage as recordMessageImpl,
+    34→  parseMultipart, guessMimeFromName, guessMimeFromContentType,
+    35→  buildFillInMiddlePrompt, computeHeuristicSuggestion,
+    36→} from "./lib.js";
+    37→
+    38→const here = path.dirname(fileURLToPath(import.meta.url));
+    39→
+    40→// Detect environment: dev monorepo vs packaged desktop app.
+    41→// In dev: here = apps/server/src/, root = monorepo root (3 levels up).
+    42→// In packaged app (asar:false): here = resources/app/server/src/,
+    43→//   root = resources/app/ (2 levels up, because the app structure is flat).
+    44→function findRoot() {
+    45→  // Try dev monorepo first (3 levels up)
+    46→  const devRoot = path.resolve(here, "../../..");
+    47→  if (existsSync(path.join(devRoot, "apps", "web", "public"))) {
+    48→    return devRoot;
+    49→  }
+    50→  // Try packaged app (2 levels up: resources/app/)
+    51→  const packagedRoot = path.resolve(here, "../..");
+    52→  if (existsSync(path.join(packagedRoot, "web", "public"))) {
+    53→    return packagedRoot;
+    54→  }
+    55→  // Fallback: use dev root
+    56→  return devRoot;
+    57→}
+    58→
+    59→const root = findRoot();
+    60→// publicDir differs between dev and packaged:
+    61→// - dev: root/apps/web/public
+    62→// - packaged: root/web/public
+    63→const publicDir = existsSync(path.join(root, "apps", "web", "public"))
+    64→  ? path.join(root, "apps", "web", "public")
+    65→  : path.join(root, "web", "public");
+    66→
+    67→const workspaceRoot = path.resolve(process.env.MOONCODE_WORKSPACE || path.join(os.homedir(), "MoonCode"));
+    68→const dataRoot = path.resolve(process.env.MOONCODE_DATA || path.join(os.homedir(), "MoonCode", ".mooncode"));
+    69→const uploadsRoot = path.join(dataRoot, "uploads");
+    70→// SECURITY (v0.9): bind to localhost by default. Binding to 0.0.0.0 exposes
+    71→// the agent's file/write/command tools to anyone on the network. Users who
+    72→// explicitly want remote access must set MOONCODE_HOST=0.0.0.0 AND acknowledge
+    73→// the risk via MOONCODE_ALLOW_REMOTE=1.
+    74→const requestedHost = process.env.MOONCODE_HOST || "127.0.0.1";
+    75→const allowRemote = process.env.MOONCODE_ALLOW_REMOTE === "1";
+    76→const host = (requestedHost === "0.0.0.0" && !allowRemote) ? "127.0.0.1" : requestedHost;
+    77→const port = Number(process.env.MOONCODE_PORT || 4173);
+    78→const workspace = new Workspace(workspaceRoot);
+    79→const git = new Git(workspaceRoot);
+    80→const ptyRegistry = new PtyRegistry();
+    81→const contextFiles = new ContextFiles(workspace, dataRoot);
+    82→const compactor = new Compactor({ threshold: 30, keepRecent: 8 });
+    83→const mcpRegistry = new McpRegistry(dataRoot, workspaceRoot);
+    84→const skills = new SkillRegistry(workspaceRoot);
+    85→const designTokens = new DesignTokens(workspaceRoot);
+    86→const autoFix = new AutoFix(workspaceRoot);
+    87→const searchIndex = new SearchIndex(workspaceRoot);
+    88→const todoList = new TodoList();
+    89→const lsp = new LspDiagnostics(workspaceRoot);
+    90→const pluginRegistry = new PluginRegistry(dataRoot);
+    91→const collabRegistry = new CollabRegistry();
+    92→// SECURITY (v0.9): cryptographic plugin signing + trust registry + audit log + rate limiter.
+    93→const pluginSigner = new PluginSigner(dataRoot);
+    94→const trustRegistry = new TrustRegistry(dataRoot);
+    95→const auditLog = new AuditLog(dataRoot);
+    96→const rateLimiter = new RateLimiter({ windowMs: 60_000, max: 200 });
+    97→// Wire the signer + trust registry into the plugin registry.
+    98→pluginRegistry.signer = pluginSigner;
+    99→pluginRegistry.trustRegistry = trustRegistry;
+   100→const stateStore = new JsonStore(path.join(dataRoot, "state.json"), {
+   101→  product: { name: "Moon Code", nameArabic: "مون كود", version: "0.7.0" },
+   102→  projects: [{ id: "mooncode-self", name: "Moon Code", path: workspaceRoot, kind: "code-design", createdAt: new Date().toISOString() }],
+   103→  sessions: [{ id: "welcome", title: "البدء مع Moon Code", updatedAt: new Date().toISOString(), mode: "build", messages: [], events: [], usage: null }],
+   104→  approvals: [],
+   105→  runs: [],
+   106→});
+   107→
+   108→await workspace.ensure();
+   109→await mkdir(uploadsRoot, { recursive: true });
+   110→await contextFiles.ensure();
+   111→
+   112→// File watcher: emits SSE updates on /api/events to all connected clients.
+   113→const watcher = new FileWatcher(workspaceRoot);
+   114→const watcherClients = new Set();
+   115→watcher.on("change", (event) => {
+   116→  const payload = JSON.stringify({ type: "file.changed", ...event });
+   117→  for (const client of watcherClients) {
+   118→    try { client.write(`data: ${payload}\n\n`); } catch {}
+   119→  }
+   120→});
+   121→watcher.start().catch((error) => console.error("[mooncode] watcher failed:", error.message));
+   122→
+   123→// Best-effort MCP server reconnection on startup. Failures are non-fatal.
+   124→mcpRegistry.connectAll().catch((error) => console.error("[mooncode] mcp init:", error.message));
+   125→
+   126→// Approvals store API for the runner.
+   127→const approvalStoreApi = {
+   128→  async __call(approval) {
+   129→    await stateStore.update((state) => {
+   130→      state.approvals = [approval, ...(state.approvals ?? [])].slice(0, 200);
+   131→      return state;
+   132→    });
+   133→  },
+   134→  async readAll() { return stateStore.read(); },
+   135→  async resolve(id, status, result) {
+   136→    await stateStore.update((next) => {
+   137→      const item = (next.approvals ?? []).find((entry) => entry.id === id);
+   138→      if (item) {
+   139→        item.status = status;
+   140→        item.resolvedAt = new Date().toISOString();
+   141→        item.result = result;
+   142→      }
+   143→      return next;
+   144→    });
+   145→  },
+   146→};
+   147→
+   148→const runner = new AgentRunner({
+   149→  workspace,
+   150→  approvalStore: approvalStoreApi,
+   151→  eventStore: stateStore,
+   152→  git,
+   153→  contextFiles,
+   154→  compactor,
+   155→  mcpRegistry,
+   156→  skills,
+   157→  designTokens,
+   158→  autoFix,
+   159→  searchIndex,
+   160→  todoList,
+   161→});
+   162→
+   163→// v0.9.1: wrappers that bind stateStore so call sites in api() don't need to change.
+   164→async function persistSessionEvent(sessionId, event) {
+   165→  return persistSessionEventImpl(sessionId, event, stateStore);
+   166→}
+   167→async function recordMessage(sessionId, role, content) {
+   168→  return recordMessageImpl(sessionId, role, content, stateStore);
+   169→}
+   170→
+   171→async function api(request, response, url) {
+   172→  const method = request.method || "GET";
+   173→  const pathname = url.pathname;
+   174→
+   175→  if (method === "GET" && pathname === "/api/health") {
+   176→    // v0.9.1: enhanced health check with uptime, memory, and git status.
+   177→    const mem = process.memoryUsage();
+   178→    let gitStatus = null;
+   179→    try { gitStatus = await git.status(); } catch { gitStatus = { repository: false }; }
+   180→    return json(response, 200, {
+   181→      ok: true,
+   182→      service: "mooncode",
+   183→      version: "1.4.0",
+   184→      uptime: Math.round(process.uptime()),
+   185→      workspace: workspaceRoot,
+   186→      isDemoWorkspace: workspaceRoot === path.resolve(root, "workspace"),
+   187→      memory: {
+   188→        rssMb: Math.round(mem.rss / 1024 / 1024),
+   189→        heapUsedMb: Math.round(mem.heapUsed / 1024 / 1024),
+   190→        heapTotalMb: Math.round(mem.heapTotal / 1024 / 1024),
+   191→      },
+   192→      git: {
+   193→        repository: gitStatus.repository,
+   194→        head: gitStatus.head || null,
+   195→        modifiedFiles: gitStatus.files?.filter((f) => !f.untracked).length || 0,
+   196→        untrackedFiles: gitStatus.files?.filter((f) => f.untracked).length || 0,
+   197→      },
+   198→      sessions: ((await stateStore.read()).sessions || []).length,
+   199→      approvalsPending: ((await stateStore.read()).approvals || []).filter((a) => a.status === "pending").length,
+   200→    });
+   201→  }
+   202→
+   203→  // v3.2.0: LSP endpoints — hover, definition, references, symbols.
+   204→  if (method === "GET" && pathname === "/api/lsp/hover") {
+   205→    const file = url.searchParams.get("file");
+   206→    const line = parseInt(url.searchParams.get("line") || "0", 10);
+   207→    const character = parseInt(url.searchParams.get("character") || "0", 10);
+   208→    if (!file) return json(response, 400, { error: "file parameter required" });
+   209→    try {
+   210→      const { LspManager } = await import("../../packages/lsp/src/client.js");
+   211→      const mgr = new LspManager(workspaceRoot);
+   212→      const hover = await mgr.hover(file, line, character);
+   213→      mgr.close();
+   214→      return json(response, 200, { hover });
+   215→    } catch (error) {
+   216→      return json(response, 200, { hover: null, error: error.message });
+   217→    }
+   218→  }
+   219→
+   220→  if (method === "GET" && pathname === "/api/lsp/symbols") {
+   221→    const query = url.searchParams.get("q") || "";
+   222→    try {
+   223→      const { LspManager } = await import("../../packages/lsp/src/client.js");
+   224→      const mgr = new LspManager(workspaceRoot);
+   225→      const client = await mgr.ensureServer("dummy.ts");
+   226→      if (!client) return json(response, 200, { symbols: [] });
+   227→      const symbols = await client.workspaceSymbols(query);
+   228→      mgr.close();
+   229→      return json(response, 200, { symbols: symbols || [] });
+   230→    } catch (error) {
+   231→      return json(response, 200, { symbols: [], error: error.message });
+   232→    }
+   233→  }
+   234→
+   235→  // v3.2.0: Session fork endpoint.
+   236→  if (method === "POST" && pathname === "/api/session/fork") {
+   237→    const body = await body(request);
+   238→    const { sessionId, messageId } = body;
+   239→    const { forkSession } = await import("../../packages/session/src/index.js");
+   240→    const state = await stateStore.read();
+   241→    const session = (state.sessions || []).find((s) => s.id === sessionId);
+   242→    if (!session) return json(response, 404, { error: "Session not found" });
+   243→    const forked = forkSession(session, messageId);
+   244→    await stateStore.update((s) => { s.sessions.unshift(forked); return s; });
+   245→    return json(response, 200, forked);
+   246→  }
+   247→
+   248→  // v3.2.0: Share link endpoint.
+   249→  if (method === "POST" && pathname === "/api/session/share") {
+   250→    const body = await body(request);
+   251→    const { sessionId } = body;
+   252→    const { createShareLink } = await import("../../packages/session/src/index.js");
+   253→    const state = await stateStore.read();
+   254→    const session = (state.sessions || []).find((s) => s.id === sessionId);
+   255→    if (!session) return json(response, 404, { error: "Session not found" });
+   256→    const share = await createShareLink(sessionId, session);
+   257→    return json(response, 200, share);
+   258→  }
+   259→
+   260→  // v3.2.0: ChatGPT login endpoint.
+   261→  if (method === "POST" && pathname === "/api/auth/chatgpt/login") {
+   262→    const { loginWithChatGPT } = await import("../../packages/auth/src/index.js");
+   263→    const { url: authUrl, promise } = loginWithChatGPT();
+   264→    const result = await promise.catch((e) => ({ ok: false, error: e.message }));
+   265→    return json(response, 200, { url: authUrl, ...result });
+   266→  }
+   267→
+   268→  // v3.2.0: Copilot login endpoint.
+   269→  if (method === "POST" && pathname === "/api/auth/copilot/login") {
+   270→    const { loginWithCopilot } = await import("../../packages/auth/src/index.js");
+   271→    const result = await loginWithCopilot();
+   272→    const authResult = await result.promise.catch((e) => ({ ok: false, error: e.message }));
+   273→    return json(response, 200, { userCode: result.userCode, verificationUri: result.verificationUri, ...authResult });
+   274→  }
+   275→
+   276→  // v3.2.0: Theme list endpoint.
+   277→  if (method === "GET" && pathname === "/api/themes") {
+   278→    const { getThemeList } = await import("../../packages/design/src/themes.js");
+   279→    return json(response, 200, { themes: getThemeList() });
+   280→  }
+   281→  if (method === "GET" && pathname === "/api/updates/check") {
+   282→    try {
+   283→      const releaseResponse = await fetch("https://api.github.com/repos/qbrahym02-cmyk/mooncode/releases/latest", {
+   284→        headers: { "user-agent": "mooncode-server/1.1.0" },
+   285→        signal: AbortSignal.timeout(10000),
+   286→      });
+   287→      if (!releaseResponse.ok) {
+   288→        return json(response, 200, { updateAvailable: false, reason: "GitHub API error" });
+   289→      }
+   290→      const release = await releaseResponse.json();
+   291→      const latest = (release.tag_name || "").replace(/^v/, "");
+   292→      const current = "1.0.0";
+   293→      const compare = (a, b) => {
+   294→        const pa = String(a).split(".").map(Number);
+   295→        const pb = String(b).split(".").map(Number);
+   296→        for (let i = 0; i < 3; i += 1) {
+   297→          if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+   298→          if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+   299→        }
+   300→        return 0;
+   301→      };
+   302→      const updateAvailable = compare(latest, current) > 0;
+   303→      return json(response, 200, {
+   304→        updateAvailable,
+   305→        current,
+   306→        latest: latest || null,
+   307→        releaseName: release.name || null,
+   308→        releaseUrl: release.html_url || null,
+   309→        releaseNotes: release.body?.slice(0, 500) || null,
+   310→        publishedAt: release.published_at || null,
+   311→      });
+   312→    } catch (error) {
+   313→      return json(response, 200, { updateAvailable: false, reason: error.message });
+   314→    }
+   315→  }
+   316→
+   317→  // Workspace switch API: lets the user point Moon Code at a different directory
+   318→  // without restarting the server. Validated against path traversal.
+   319→  if (method === "POST" && pathname === "/api/workspace") {
+   320→    const input = await body(request);
+   321→    const targetPath = path.resolve(String(input.path || ""));
+   322→    try {
+   323→      const info = await stat(targetPath);
+   324→      if (!info.isDirectory()) return json(response, 400, { error: "Path is not a directory" });
+   325→      // Reinitialize workspace-bound services.
+   326→      workspace.root = targetPath;
+   327→      git.root = targetPath;
+   328→      searchIndex.root = targetPath;
+   329→      lsp.root = targetPath;
+   330→      autoFix.root = targetPath;
+   331→      designTokens.root = targetPath;
+   332→      skills.root = targetPath;
+   333→      await workspace.ensure();
+   334→      await auditLog.record({ action: "workspace.switch", from: workspaceRoot, to: targetPath });
+   335→      return json(response, 200, { ok: true, workspace: targetPath, message: "Workspace switched. Refresh the browser to see the new files." });
+   336→    } catch (error) {
+   337→      return json(response, 400, { error: `Cannot access path: ${error.message}` });
+   338→    }
+   339→  }
+   340→
+   341→  if (method === "GET" && pathname === "/api/bootstrap") {
+   342→    const state = await stateStore.read();
+   343→    const files = await workspace.tree(".", { maxDepth: 4, maxEntries: 600 });
+   344→    const gitStatus = await git.status().catch(() => ({ repository: false }));
+   345→    const skillList = await skills.list().catch(() => []);
+   346→    const tokens = await designTokens.read().catch(() => null);
+   347→    const ctxManifest = await contextFiles.readManifest().catch(() => ({ files: [] }));
+   348→    return json(response, 200, {
+   349→      product: { name: "Moon Code", nameArabic: "مون كود", version: "0.7.0" },
+   350→      project: state.projects?.[0],
+   351→      sessions: state.sessions ?? [],
+   352→      approvals: (state.approvals ?? []).filter((item) => item.status === "pending"),
+   353→      providers: providerCatalog(),
+   354→      files,
+   355→      git: gitStatus,
+   356→      capabilities: { web: true, desktop: true, tui: true, artifacts: true, terminal: true, localFirst: true, streaming: true, resume: true, diff: true, git: true, pty: true, multimodal: true, watcher: true, mcp: true, skills: true, designTokens: true, contextFiles: true, compaction: true, autoFix: true, grep: true, fetchUrl: true, runTests: true, parseAst: true, subagents: true, diagnose: true, worktrees: true, gitGraph: true, searchIndex: true, todos: true, lsp: true, plugins: true, collab: true, voice: true, markdownEditor: true, codeEditor: true, pwa: true, cryptographicSigning: true, auditLog: true, rateLimiting: true, secretRedaction: true, trustRegistry: true },
+   357→      artifactExtensions: ["html", "htm", "svg", "png", "jpg", "jpeg", "gif", "webp", "avif", "md", "markdown", "json", "jsonc", "txt", "log", "js", "mjs", "cjs", "ts", "tsx", "jsx", "css", "scss", "py", "go", "rs", "java", "kt", "swift", "c", "h", "cpp", "hpp", "sh", "sql", "yml", "yaml", "toml", "xml", "env"],
+   358→      skills: skillList,
+   359→      builtinSkills: BUILTIN_SKILLS,
+   360→      designTokens: tokens,
+   361→      contextFiles: ctxManifest.files,
+   362→      mcpServers: [...mcpRegistry.clients.values()].map((client) => ({ id: client.id, closed: client.closed, serverInfo: client.serverInfo })),
+   363→    });
+   364→  }
+   365→
+   366→  if (method === "GET" && pathname === "/api/tree") {
+   367→    return json(response, 200, await workspace.tree(url.searchParams.get("path") || ".", {
+   368→      maxDepth: url.searchParams.get("depth") || 6,
+   369→      maxEntries: 2000,
+   370→    }));
+   371→  }
+   372→
+   373→  if (method === "GET" && pathname === "/api/file") {
+   374→    return json(response, 200, await workspace.read(url.searchParams.get("path") || ""));
+   375→  }
+   376→
+   377→  if (method === "PUT" && pathname === "/api/file") {
+   378→    if (request.headers["x-mooncode-confirm"] !== "write") return json(response, 428, { error: "Explicit write confirmation header is required" });
+   379→    const input = await body(request, 5_000_000);
+   380→    const result = await workspace.write(input.path, input.content);
+   381→    await git.checkpoint(`mooncode: write ${input.path}`).catch(() => {});
+   382→    await auditLog.record({ action: "file.write", path: input.path, bytes: result.bytes });
+   383→    return json(response, 200, result);
+   384→  }
+   385→
+   386→  if (method === "GET" && pathname === "/api/search") {
+   387→    return json(response, 200, await workspace.search(url.searchParams.get("q") || "", { regex: url.searchParams.get("regex") === "true" }));
+   388→  }
+   389→
+   390→  // Sessions API
+   391→  const sessionMatch = pathname.match(/^\/api\/sessions(?:\/([^/]+))?$/);
+   392→  if (sessionMatch) {
+   393→    if (method === "GET" && !sessionMatch[1]) {
+   394→      const state = await stateStore.read();
+   395→      return json(response, 200, (state.sessions ?? []).map((session) => ({
+   396→        id: session.id, title: session.title, mode: session.mode, updatedAt: session.updatedAt,
+   397→        messageCount: (session.messages ?? []).length, usage: session.usage ?? null,
+   398→      })));
+   399→    }
+   400→    if (method === "POST" && !sessionMatch[1]) {
+   401→      const input = await body(request);
+   402→      const id = input.id || crypto.randomUUID();
+   403→      await stateStore.update((state) => {
+   404→        if ((state.sessions ?? []).some((item) => item.id === id)) return state;
+   405→        state.sessions.unshift({
+   406→          id, title: input.title || `جلسة جديدة ${id.slice(0, 4)}`, mode: input.mode || "build",
+   407→          updatedAt: new Date().toISOString(), messages: [], events: [], usage: null,
+   408→        });
+   409→        return state;
+   410→      });
+   411→      return json(response, 201, { id });
+   412→    }
+   413→    if (method === "GET" && sessionMatch[1]) {
+   414→      const state = await stateStore.read();
+   415→      const session = (state.sessions ?? []).find((item) => item.id === sessionMatch[1]);
+   416→      if (!session) return json(response, 404, { error: "Session not found" });
+   417→      return json(response, 200, session);
+   418→    }
+   419→    if (method === "DELETE" && sessionMatch[1]) {
+   420→      await stateStore.update((state) => {
+   421→        state.sessions = (state.sessions ?? []).filter((item) => item.id !== sessionMatch[1]);
+   422→        return state;
+   423→      });
+   424→      return json(response, 200, { deleted: sessionMatch[1] });
+   425→    }
+   426→  }
+   427→
+   428→  // Git API
+   429→  const gitMatch = pathname.match(/^\/api\/git\/([a-z]+)$/);
+   430→  if (gitMatch) {
+   431→    const action = gitMatch[1];
+   432→    if (action === "status") return json(response, 200, await git.status().catch((error) => ({ repository: false, error: error.message })));
+   433→    if (action === "diff") return json(response, 200, await git.diff({ path: url.searchParams.get("path") || undefined, cached: url.searchParams.get("cached") === "true" }).catch((error) => ({ repository: false, error: error.message })));
+   434→    if (action === "log") return json(response, 200, await git.log({ limit: Number(url.searchParams.get("limit")) || 20 }).catch(() => ({ commits: [] })));
+   435→    if (action === "branches") return json(response, 200, await git.branches().catch(() => ({ branches: [], current: null })));
+   436→    if (action === "init") return json(response, 200, await git.init());
+   437→    if (action === "checkpoint") {
+   438→      const input = await body(request);
+   439→      return json(response, 200, await git.checkpoint(input.message || "mooncode: manual checkpoint"));
+   440→    }
+   441→    if (action === "undo") {
+   442→      const input = await body(request).catch(() => ({}));
+   443→      // HARD undo requires explicit confirmation to prevent accidental data loss.
+   444→      if (input.hard === true && input.confirm !== true) {
+   445→        return json(response, 200, {
+   446→          undone: false,
+   447→          reason: "hard_undo_requires_confirmation",
+   448→          message: "Hard undo will discard all changes since the last checkpoint. Pass { hard: true, confirm: true } to proceed.",
+   449→          currentHead: await git.head().catch(() => null),
+   450→        });
+   451→      }
+   452→      const result = await git.undo({ hard: input.hard === true, confirm: input.confirm === true }).catch((error) => ({ undone: false, error: error.message }));
+   453→      if (result.backup) {
+   454→        result.recoveryHint = `If you lost work, recover it via: git checkout ${result.backup}`;
+   455→      }
+   456→      return json(response, 200, result);
+   457→    }
+   458→    if (action === "head") return json(response, 200, { sha: await git.head() });
+   459→  }
+   460→
+   461→  // PTY sessions API
+   462→  const ptyMatch = pathname.match(/^\/api\/terminal\/sessions(?:\/([^/]+))?$/);
+   463→  if (ptyMatch) {
+   464→    if (method === "GET" && !ptyMatch[1]) return json(response, 200, ptyRegistry.list());
+   465→    if (method === "POST" && !ptyMatch[1]) {
+   466→      const input = await body(request);
+   467→      const session = await ptyRegistry.create({ cwd: workspaceRoot, cols: input.cols || 80, rows: input.rows || 24 });
+   468→      return json(response, 201, { id: session.id, cwd: session.cwd, cols: session.cols, rows: session.rows });
+   469→    }
+   470→    if (method === "DELETE" && ptyMatch[1]) {
+   471→      const session = ptyRegistry.get(ptyMatch[1]);
+   472→      if (!session) return json(response, 404, { error: "Session not found" });
+   473→      session.close("deleted");
+   474→      return json(response, 200, { deleted: ptyMatch[1] });
+   475→    }
+   476→  }
+   477→
+   478→  // PTY send: run a command in the persistent session
+   479→  const ptySendMatch = pathname.match(/^\/api\/terminal\/sessions\/([^/]+)\/send$/);
+   480→  if (method === "POST" && ptySendMatch) {
+   481→    const session = ptyRegistry.get(ptySendMatch[1]);
+   482→    if (!session) return json(response, 404, { error: "Session not found" });
+   483→    if (session.closed) return json(response, 410, { error: "Session closed" });
+   484→    const input = await body(request);
+   485→    if (input.resize) session.resize(input.resize.cols, input.resize.rows);
+   486→    if (input.signal === "interrupt") { session.interrupt(); return json(response, 200, { interrupted: true }); }
+   487→    if (!input.command) return json(response, 400, { error: "command is required" });
+   488→    try {
+   489→      const result = await session.send(input.command, { timeout: input.timeout });
+   490→      return json(response, 200, result);
+   491→    } catch (error) { return json(response, 500, { error: error.message }); }
+   492→  }
+   493→
+   494→  // Legacy one-shot terminal (still supported for backwards compatibility)
+   495→  if (method === "POST" && pathname === "/api/terminal") {
+   496→    const input = await body(request);
+   497→    const result = await workspace.run(input.command, { approved: request.headers["x-mooncode-confirm"] === "execute", timeout: input.timeout });
+   498→    return json(response, result.approvalRequired ? 202 : 200, result);
+   499→  }
+   500→
+   501→  // Image upload endpoint: stores raw bytes under .mooncode/uploads/ and returns
+   502→  // a data URI suitable for inclusion in the next chat message.
+   503→  if (method === "POST" && pathname === "/api/uploads") {
+   504→    const chunks = [];
+   505→    let size = 0;
+   506→    for await (const chunk of request) {
+   507→      size += chunk.length;
+   508→      if (size > 12_000_000) return json(response, 413, { error: "Image exceeds 12MB limit" });
+   509→      chunks.push(chunk);
+   510→    }
+   511→    const buffer = Buffer.concat(chunks);
+   512→    // Try to parse multipart form data first; fall back to raw bytes with the
+   513→    // Content-Type header as the assumed MIME type.
+   514→    const rawContentType = request.headers["content-type"] || "application/octet-stream";
+   515→    let fileBuffer = buffer;
+   516→    let fileMime = rawContentType;
+   517→    let fileName = "upload";
+   518→    if (rawContentType.startsWith("multipart/form-data")) {
+   519→      const parsed = parseMultipart(buffer, rawContentType);
+   520→      if (parsed) {
+   521→        fileBuffer = parsed.buffer;
+   522→        fileMime = parsed.contentType || guessMimeFromName(parsed.filename);
+   523→        fileName = parsed.filename || "upload";
+   524→      } else {
+   525→        return json(response, 400, { error: "Could not parse multipart upload" });
+   526→      }
+   527→    } else {
+   528→      fileMime = guessMimeFromContentType(rawContentType);
+   529→    }
+   530→    if (!fileMime.startsWith("image/")) {
+   531→      return json(response, 415, { error: `Unsupported media type: ${fileMime}. Only image/* is accepted.` });
+   532→    }
+   533→    const ext = fileMime === "image/png" ? "png" : fileMime === "image/gif" ? "gif" : fileMime === "image/webp" ? "webp" : "jpg";
+   534→    const id = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+   535→    await writeFile(path.join(uploadsRoot, id), fileBuffer);
+   536→    const dataUri = `data:${fileMime};base64,${fileBuffer.toString("base64")}`;
+   537→    return json(response, 201, { id, mime: fileMime, filename: fileName, bytes: fileBuffer.length, dataUri });
+   538→  }
+   539→
+   540→  // Approval endpoints
+   541→  if (method === "GET" && pathname === "/api/approvals") {
+   542→    const state = await stateStore.read();
+   543→    return json(response, 200, state.approvals ?? []);
+   544→  }
+   545→
+   546→  const approvalMatch = pathname.match(/^\/api\/approvals\/([^/]+)$/);
+   547→  if (method === "POST" && approvalMatch) {
+   548→    const input = await body(request);
+   549→    const approvalId = decodeURIComponent(approvalMatch[1]);
+   550→    const state = await stateStore.read();
+   551→    const approval = (state.approvals ?? []).find((item) => item.id === approvalId);
+   552→    if (!approval) return json(response, 404, { error: "Approval not found" });
+   553→    if (approval.status !== "pending") return json(response, 409, { error: "Approval was already resolved" });
+   554→    const action = input.action === "approve" ? "approved" : "denied";
+   555→    const result = action === "approved" ? await runner.executeTool(approval.tool, true) : null;
+   556→    await approvalStoreApi.resolve(approvalId, action, result);
+   557→    await auditLog.record({ action: `approval.${action}`, approvalId, tool: approval.tool?.name, summary: approval.summary });
+   558→    return json(response, 200, { id: approvalId, status: action, result });
+   559→  }
+   560→
+   561→  if (method === "POST" && pathname === "/api/providers/test") {
+   562→    const input = await body(request);
+   563→    // When the caller passes an image as a data URI, exercise the vision path
+   564→    // against the configured provider so the user can confirm the model can
+   565→    // see the image and respond to it.
+   566→    const messages = input.image
+   567→      ? [{ role: "user", content: [
+   568→          { type: "text", text: input.prompt || "Describe this image in one sentence." },
+   569→          { type: "image_url", image_url: { url: input.image } },
+   570→        ] }]
+   571→      : [{ role: "user", content: input.prompt || "Reply with the single word: connected" }];
+   572→    const result = await callModel(input, { messages, tools: [] });
+   573→    return json(response, 200, { ok: true, text: result.text, usage: result.usage, vision: Boolean(input.image) });
+   574→  }
+   575→
+   576→  // Context files API
+   577→  if (method === "GET" && pathname === "/api/context") {
+   578→    const manifest = await contextFiles.readManifest();
+   579→    return json(response, 200, manifest);
+   580→  }
+   581→  if (method === "POST" && pathname === "/api/context") {
+   582→    const input = await body(request);
+   583→    const manifest = await contextFiles.add(input.path, input.description || "");
+   584→    return json(response, 201, manifest);
+   585→  }
+   586→  if (method === "DELETE" && pathname === "/api/context") {
+   587→    const input = await body(request);
+   588→    const manifest = await contextFiles.remove(input.path);
+   589→    return json(response, 200, manifest);
+   590→  }
+   591→
+   592→  // Compaction API: trigger a manual compaction of a session's history.
+   593→  if (method === "POST" && pathname === "/api/compact") {
+   594→    const input = await body(request);
+   595→    const sessionId = input.sessionId || "welcome";
+   596→    const state = await stateStore.read();
+   597→    const session = (state.sessions ?? []).find((item) => item.id === sessionId);
+   598→    if (!session) return json(response, 404, { error: "Session not found" });
+   599→    const messages = [
+   600→      { role: "system", content: "Compaction requested manually." },
+   601→      ...(session.messages ?? []),
+   602→    ];
+   603→    const result = await compactor.compact(messages, {
+   604→      provider: input.provider, model: input.model, apiKey: input.apiKey, baseUrl: input.baseUrl,
+   605→    });
+   606→    if (result.compacted) {
+   607→      await stateStore.update((next) => {
+   608→        const item = (next.sessions ?? []).find((entry) => entry.id === sessionId);
+   609→        if (item) {
+   610→          item.messages = result.messages;
+   611→          item.compacted = true;
+   612→          item.updatedAt = new Date().toISOString();
+   613→        }
+   614→        return next;
+   615→      });
+   616→    }
+   617→    return json(response, 200, result);
+   618→  }
+   619→
+   620→  // MCP API
+   621→  const mcpMatch = pathname.match(/^\/api\/mcp(?:\/([a-z]+))?(?:\/([^/]+))?$/);
+   622→  if (mcpMatch) {
+   623→    const action = mcpMatch[1];
+   624→    const id = mcpMatch[2];
+   625→    if (method === "GET" && !action) {
+   626→      return json(response, 200, {
+   627→        servers: [...mcpRegistry.clients.values()].map((client) => ({ id: client.id, closed: client.closed, serverInfo: client.serverInfo })),
+   628→        config: await mcpRegistry.readConfig().catch(() => ({})),
+   629→      });
+   630→    }
+   631→    if (method === "POST" && action === "servers") {
+   632→      const input = await body(request);
+   633→      const config = await mcpRegistry.addServer(input.id, { command: input.command, args: input.args, env: input.env, cwd: input.cwd });
+   634→      return json(response, 201, config);
+   635→    }
+   636→    if (method === "POST" && action === "connect" && id) {
+   637→      try { await mcpRegistry.connect(id); return json(response, 200, { ok: true }); }
+   638→      catch (error) { return json(response, 500, { error: error.message }); }
+   639→    }
+   640→    if (method === "DELETE" && action === "servers" && id) {
+   641→      const config = await mcpRegistry.removeServer(id);
+   642→      return json(response, 200, config);
+   643→    }
+   644→    if (method === "GET" && action === "tools") {
+   645→      const tools = await mcpRegistry.listAllTools();
+   646→      return json(response, 200, { tools });
+   647→    }
+   648→  }
+   649→
+   650→  // Skills API
+   651→  if (method === "GET" && pathname === "/api/skills") {
+   652→    return json(response, 200, { skills: await skills.list(), builtin: BUILTIN_SKILLS });
+   653→  }
+   654→  if (method === "POST" && pathname === "/api/skills/invoke") {
+   655→    const input = await body(request);
+   656→    const manifest = await skills.get(input.id).catch(() => null);
+   657→    if (!manifest) return json(response, 404, { error: "Skill not found" });
+   658→    const errors = skills.validateInputs(manifest, input.inputs || {});
+   659→    if (errors.length) return json(response, 400, { error: errors.join("; ") });
+   660→    const prompt = skills.renderPrompt(manifest, input.inputs || {});
+   661→    return json(response, 200, { ok: true, id: input.id, prompt, mode: manifest.mode || "build" });
+   662→  }
+   663→
+   664→  // Design tokens API
+   665→  if (method === "GET" && pathname === "/api/design-tokens") {
+   666→    return json(response, 200, { tokens: await designTokens.read() });
+   667→  }
+   668→  if (method === "POST" && pathname === "/api/design-tokens") {
+   669→    const input = await body(request);
+   670→    const tokens = await designTokens.write(input.tokens || {});
+   671→    return json(response, 201, { tokens });
+   672→  }
+   673→  if (method === "GET" && pathname === "/api/design-tokens/reference") {
+   674→    const tokens = await designTokens.read();
+   675→    if (!tokens) return json(response, 404, { error: "No design tokens configured" });
+   676→    const html = designTokens.toReferenceHtml(tokens);
+   677→    response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+   678→    response.end(html);
+   679→    return;
+   680→  }
+   681→  if (method === "GET" && pathname === "/api/design-tokens/css") {
+   682→    const tokens = await designTokens.read();
+   683→    if (!tokens) return json(response, 404, { error: "No design tokens configured" });
+   684→    const css = designTokens.toCss(tokens);
+   685→    response.writeHead(200, { "content-type": "text/css; charset=utf-8", "cache-control": "no-store" });
+   686→    response.end(css);
+   687→    return;
+   688→  }
+   689→
+   690→  // Skills CRUD API
+   691→  if (method === "POST" && pathname === "/api/skills/create") {
+   692→    const input = await body(request);
+   693→    try {
+   694→      const skill = await skills.create(input.id, input.manifest);
+   695→      return json(response, 201, skill);
+   696→    } catch (error) { return json(response, 400, { error: error.message }); }
+   697→  }
+   698→  if (method === "PUT" && pathname === "/api/skills/update") {
+   699→    const input = await body(request);
+   700→    try {
+   701→      const skill = await skills.update(input.id, input.manifest);
+   702→      return json(response, 200, skill);
+   703→    } catch (error) { return json(response, 400, { error: error.message }); }
+   704→  }
+   705→  if (method === "DELETE" && pathname === "/api/skills/delete") {
+   706→    const input = await body(request);
+   707→    try {
+   708→      const result = await skills.delete(input.id);
+   709→      return json(response, 200, result);
+   710→    } catch (error) { return json(response, 400, { error: error.message }); }
+   711→  }
+   712→  if (method === "GET" && pathname === "/api/skills/history") {
+   713→    return json(response, 200, { history: skills.getHistory() });
+   714→  }
+   715→
+   716→  // Auto-fix API: trigger a fix on a file or directory outside the agent loop.
+   717→  if (method === "POST" && pathname === "/api/autofix") {
+   718→    const input = await body(request);
+   719→    try {
+   720→      const result = await autoFix.fix(input.path, { fixers: input.fixers, dryRun: input.dryRun, verify: input.verify });
+   721→      return json(response, 200, result);
+   722→    } catch (error) { return json(response, 400, { error: error.message }); }
+   723→  }
+   724→
+   725→  // Diagnose API: scan command output for known error patterns and return hints.
+   726→  if (method === "POST" && pathname === "/api/diagnose") {
+   727→    const input = await body(request);
+   728→    const matches = diagnoseError(String(input.output || ""));
+   729→    return json(response, 200, { matches });
+   730→  }
+   731→
+   732→  // Standalone tool endpoints: grep, fetch, tests, parse_ast.
+   733→  if (method === "GET" && pathname === "/api/grep") {
+   734→    const result = await workspace.grep(url.searchParams.get("pattern") || "", {
+   735→      path: url.searchParams.get("path") || undefined,
+   736→      glob: url.searchParams.get("glob") || undefined,
+   737→      caseSensitive: url.searchParams.get("caseSensitive") === "true",
+   738→      contextBefore: Number(url.searchParams.get("contextBefore")) || 0,
+   739→      contextAfter: Number(url.searchParams.get("contextAfter")) || 0,
+   740→      maxResults: Number(url.searchParams.get("maxResults")) || 50,
+   741→    });
+   742→    return json(response, 200, { results: result });
+   743→  }
+   744→  if (method === "POST" && pathname === "/api/fetch") {
+   745→    const input = await body(request);
+   746→    const result = await workspace.fetchUrl(input.url, { method: input.method, headers: input.headers, body: input.body, maxBytes: input.maxBytes, asText: input.asText });
+   747→    return json(response, 200, result);
+   748→  }
+   749→  if (method === "POST" && pathname === "/api/tests/run") {
+   750→    const input = await body(request);
+   751→    const result = await workspace.runTests({ pattern: input.pattern, timeout: input.timeout });
+   752→    const diagnostics = diagnoseError(`${result.stdout}\n${result.stderr}`);
+   753→    return json(response, 200, { ...result, diagnostics });
+   754→  }
+   755→  if (method === "GET" && pathname === "/api/parse-ast") {
+   756→    const result = await workspace.parseAST(url.searchParams.get("path") || "", { detail: url.searchParams.get("detail") || "summary" });
+   757→    return json(response, 200, result);
+   758→  }
+   759→
+   760→  // Todo list API (per-session agent task list).
+   761→  if (method === "GET" && pathname === "/api/todos") {
+   762→    return json(response, 200, { items: todoList.list(), summary: todoList.summary() });
+   763→  }
+   764→  if (method === "POST" && pathname === "/api/todos") {
+   765→    const input = await body(request);
+   766→    const action = input.action;
+   767→    if (action === "add") return json(response, 201, todoList.add(input.content, { priority: input.priority }));
+   768→    if (action === "update") return json(response, 200, todoList.update(input.id, { content: input.content, status: input.status, priority: input.priority }));
+   769→    if (action === "remove") return json(response, 200, todoList.remove(input.id));
+   770→    if (action === "clear") { todoList.clear(); return json(response, 200, { cleared: true }); }
+   771→    return json(response, 400, { error: "Unknown action" });
+   772→  }
+   773→
+   774→  // Search index API: rebuild + query.
+   775→  if (method === "POST" && pathname === "/api/search-index/rebuild") {
+   776→    const tree = await workspace.tree(".", { maxDepth: 12, maxEntries: 5000 });
+   777→    const files = tree.filter((f) => f.type === "file").map((f) => f.path);
+   778→    const result = await searchIndex.indexAll(files);
+   779→    return json(response, 200, result);
+   780→  }
+   781→  if (method === "GET" && pathname === "/api/search-index") {
+   782→    const query = url.searchParams.get("q") || "";
+   783→    const limit = Number(url.searchParams.get("limit")) || 20;
+   784→    const results = searchIndex.search(query, { limit });
+   785→    return json(response, 200, { query, results, stats: searchIndex.stats() });
+   786→  }
+   787→
+   788→  // LSP diagnostics API.
+   789→  if (method === "GET" && pathname === "/api/diagnostics") {
+   790→    const target = url.searchParams.get("path") || ".";
+   791→    const result = await lsp.diagnose(target);
+   792→    return json(response, 200, result);
+   793→  }
+   794→  if (method === "GET" && pathname === "/api/lsp/status") {
+   795→    return json(response, 200, await lsp.status());
+   796→  }
+   797→  if (method === "POST" && pathname === "/api/lsp/install") {
+   798→    // SECURITY (v0.9): npm install is a mutating operation that executes
+   799→    // arbitrary install scripts from the network. Route it through the same
+   800→    // approval workflow as run_command so the user must explicitly consent.
+   801→    const input = await body(request).catch(() => ({}));
+   802→    if (request.headers["x-mooncode-confirm"] !== "install") {
+   803→      // Return 202 with approval required — matches the terminal pattern.
+   804→      return json(response, 202, {
+   805→        approvalRequired: true,
+   806→        risk: "execute",
+   807→        command: "npm install --save-dev eslint@latest",
+   808→        reason: "Installing npm packages runs arbitrary install scripts from the network. Send { } with header x-mooncode-confirm: install to proceed.",
+   809→        pinnedVersion: null, // ESLint latest — we don't pin, which is why approval matters
+   810→      });
+   811→    }
+   812→    // User confirmed. Record an audit log entry.
+   813→    await auditLog({
+   814→      action: "lsp.install",
+   815→      command: "npm install --save-dev eslint@latest",
+   816→      approved: true,
+   817→      approvedBy: "http-header",
+   818→      at: new Date().toISOString(),
+   819→    });
+   820→    const result = await lsp.install();
+   821→    return json(response, 200, result);
+   822→  }
+   823→
+   824→  // Git worktree API.
+   825→  if (method === "GET" && pathname === "/api/worktrees") {
+   826→    return json(response, 200, await git.listWorktrees().catch(() => ({ worktrees: [] })));
+   827→  }
+   828→  if (method === "POST" && pathname === "/api/worktrees") {
+   829→    const input = await body(request);
+   830→    return json(response, 201, await git.addWorktree(input.name, { base: input.base }));
+   831→  }
+   832→  const worktreeMatch = pathname.match(/^\/api\/worktrees\/([^/]+)$/);
+   833→  if (method === "DELETE" && worktreeMatch) {
+   834→    return json(response, 200, await git.removeWorktree(decodeURIComponent(worktreeMatch[1])));
+   835→  }
+   836→
+   837→  // Git graph API (for visual rendering).
+   838→  if (method === "GET" && pathname === "/api/git-graph") {
+   839→    return json(response, 200, await git.graph({ limit: Number(url.searchParams.get("limit")) || 50 }).catch(() => ({ commits: [], edges: [] })));
+   840→  }
+   841→
+   842→  // Plugins API.
+   843→  if (method === "GET" && pathname === "/api/plugins") {
+   844→    return json(response, 200, { plugins: await pluginRegistry.list() });
+   845→  }
+   846→  if (method === "POST" && pathname === "/api/plugins/install") {
+   847→    const input = await body(request);
+   848→    return json(response, 201, await pluginRegistry.install(input.id, input.manifest, input.entry || ""));
+   849→  }
+   850→  if (method === "DELETE" && pathname === "/api/plugins") {
+   851→    const input = await body(request);
+   852→    return json(response, 200, await pluginRegistry.uninstall(input.id));
+   853→  }
+   854→
+   855→  // Collaboration API (WebSocket-style session management over HTTP).
+   856→  if (method === "GET" && pathname === "/api/collab/sessions") {
+   857→    return json(response, 200, { sessions: collabRegistry.list() });
+   858→  }
+   859→  if (method === "POST" && pathname === "/api/collab/sessions") {
+   860→    const input = await body(request);
+   861→    const session = collabRegistry.create(input.id, { document: input.document });
+   862→    return json(response, 201, { id: session.id });
+   863→  }
+   864→  const collabMatch = pathname.match(/^\/api\/collab\/sessions\/([^/]+)(?:\/(join|leave|edit|snapshot|stream))?$/);
+   865→  if (collabMatch) {
+   866→    const sessionId = decodeURIComponent(collabMatch[1]);
+   867→    const action = collabMatch[2];
+   868→    const session = collabRegistry.get(sessionId);
+   869→    if (!session) return json(response, 404, { error: "Collab session not found" });
+   870→    if (method === "GET" && !action) return json(response, 200, session.getSnapshot());
+   871→    if (action === "join" && method === "POST") {
+   872→      const input = await body(request);
+   873→      const peerId = input.peerId || crypto.randomUUID();
+   874→      const result = session.join(peerId, input);
+   875→      // Notify all SSE subscribers that a new peer joined.
+   876→      broadcastCollab(sessionId, { type: "peers", peers: [...session.peers.entries()].map(([id, p]) => ({ id, ...p })) });
+   877→      return json(response, 200, result);
+   878→    }
+   879→    if (action === "leave" && method === "POST") {
+   880→      const input = await body(request);
+   881→      session.leave(input.peerId);
+   882→      broadcastCollab(sessionId, { type: "peers", peers: [...session.peers.entries()].map(([id, p]) => ({ id, ...p })) });
+   883→      return json(response, 200, { left: input.peerId });
+   884→    }
+   885→    if (action === "edit" && method === "POST") {
+   886→      const input = await body(request);
+   887→      const op = session.edit(input.peerId, input.operation);
+   888→      return json(response, 200, op);
+   889→    }
+   890→    if (action === "snapshot" && method === "GET") {
+   891→      return json(response, 200, session.getSnapshot());
+   892→    }
+   893→    if (action === "stream" && method === "GET") {
+   894→      // SSE stream: push edits/cursor updates to subscribers.
+   895→      response.writeHead(200, {
+   896→        "content-type": "text/event-stream",
+   897→        "cache-control": "no-store",
+   898→        "connection": "keep-alive",
+   899→      });
+   900→      response.write(`data: ${JSON.stringify({ type: "connected", sessionId, document: session.document })}\n\n`);
+   901→      if (!collabSubscribers.has(sessionId)) collabSubscribers.set(sessionId, new Set());
+   902→      collabSubscribers.get(sessionId).add(response);
+   903→      request.once("close", () => {
+   904→        collabSubscribers.get(sessionId)?.delete(response);
+   905→      });
+   906→      return;
+   907→    }
+   908→  }
+   909→
+   910→  // AI inline suggestions API: calls the configured provider with a
+   911→  // fill-in-the-middle prompt. Returns the model's completion as a suggestion.
+   912→  if (method === "POST" && pathname === "/api/suggest") {
+   913→    const input = await body(request);
+   914→    const prefix = String(input.prefix || "");
+   915→    const suffix = String(input.suffix || "");
+   916→    const language = input.language || "javascript";
+   917→    const filePath = input.path || "";
+   918→    // If no provider is configured, return a heuristic suggestion based on
+   919→    // common patterns (e.g. close brackets, complete function signatures).
+   920→    const provider = input.provider || process.env.MOONCODE_PROVIDER || "demo";
+   921→    const model = input.model || process.env.MOONCODE_MODEL || "demo-local";
+   922→    if (provider === "demo" || !input.apiKey) {
+   923→      const heuristic = computeHeuristicSuggestion(prefix, suffix, language);
+   924→      return json(response, 200, { suggestion: heuristic, prefix, suffix, source: "heuristic" });
+   925→    }
+   926→    try {
+   927→      const fimPrompt = buildFillInMiddlePrompt(prefix, suffix, language, filePath);
+   928→      const result = await callModel({ provider, model, baseUrl: input.baseUrl, apiKey: input.apiKey }, {
+   929→        messages: [{ role: "user", content: fimPrompt }],
+   930→        tools: [],
+   931→        temperature: 0.05,
+   932→      });
+   933→      const suggestion = (result.text || "").trim();
+   934→      return json(response, 200, { suggestion, prefix, suffix, source: "model", usage: result.usage });
+   935→    } catch (error) {
+   936→      return json(response, 200, { suggestion: null, prefix, error: error.message, source: "model_error" });
+   937→    }
+   938→  }
+   939→
+   940→  // Markdown render API (server-side safe render to HTML).
+   941→  if (method === "POST" && pathname === "/api/markdown") {
+   942→    const input = await body(request);
+   943→    const { renderMarkdown } = await import("../../../packages/artifacts/src/index.js");
+   944→    const html = renderMarkdown(String(input.content || ""));
+   945→    return json(response, 200, { html });
+   946→  }
+   947→
+   948→  // SECURITY (v0.9): Audit log API — read-only by default.
+   949→  if (method === "GET" && pathname === "/api/audit") {
+   950→    const limit = Number(url.searchParams.get("limit")) || 100;
+   951→    const offset = Number(url.searchParams.get("offset")) || 0;
+   952→    const action = url.searchParams.get("action") || undefined;
+   953→    const entries = await auditLog.read({ limit, offset, action });
+   954→    return json(response, 200, { entries, count: entries.length });
+   955→  }
+   956→  if (method === "GET" && pathname === "/api/audit/stats") {
+   957→    return json(response, 200, await auditLog.stats());
+   958→  }
+   959→
+   960→  // SECURITY (v0.9): Trust registry API — manage trusted author public keys.
+   961→  if (method === "GET" && pathname === "/api/trust") {
+   962→    return json(response, 200, { authors: await trustRegistry.list() });
+   963→  }
+   964→  if (method === "POST" && pathname === "/api/trust") {
+   965→    const input = await body(request);
+   966→    if (request.headers["x-mooncode-confirm"] !== "trust") {
+   967→      return json(response, 202, { approvalRequired: true, reason: "Adding a trusted author is a security-sensitive operation. Send with header x-mooncode-confirm: trust." });
+   968→    }
+   969→    await auditLog.record({ action: "trust.add", authorId: input.authorId, name: input.name });
+   970→    const author = await trustRegistry.addAuthor(input.authorId, input.publicKey, input.name, input.trustLevel || "trusted");
+   971→    return json(response, 201, author);
+   972→  }
+   973→
+   974→  // SECURITY (v0.9): Secret detection API — scan a string for secrets.
+   975→  if (method === "POST" && pathname === "/api/secrets/scan") {
+   976→    const input = await body(request);
+   977→    const { detectSecrets, redactSecrets: redact } = await import("../../../packages/security/src/secrets.js");
+   978→    const detected = detectSecrets(input.text || "");
+   979→    const { redacted, found } = redact(input.text || "");
+   980→    return json(response, 200, { detected, found, redacted });
+   981→  }
+   982→
+   983→  // SECURITY (v0.9): Plugin signing key generation — first-run setup.
+   984→  if (method === "POST" && pathname === "/api/plugins/generate-keys") {
+   985→    if (request.headers["x-mooncode-confirm"] !== "generate-keys") {
+   986→      return json(response, 202, { approvalRequired: true, reason: "Generating signing keys is a security-sensitive operation. Send with header x-mooncode-confirm: generate-keys." });
+   987→    }
+   988→    await auditLog.record({ action: "plugin.generate-keys" });
+   989→    const keys = await pluginSigner.generateKeys();
+   990→    return json(response, 201, { ok: true, ...keys });
+   991→  }
+   992→
+   993→  // Diff endpoint
+   994→  if (method === "GET" && pathname === "/api/diff") {
+   995→    const filePath = url.searchParams.get("path") || "";
+   996→    const state = await stateStore.read();
+   997→    const approvals = (state.approvals ?? []).filter((item) => item.status === "approved" && item.tool?.input?.path === filePath);
+   998→    const latest = approvals.at(-1);
+   999→    if (!latest) return json(response, 200, { path: filePath, previous: null });
+  1000→    const current = await workspace.read(filePath).catch(() => ({ content: "" }));
+  1001→    return json(response, 200, {
+  1002→      path: filePath,
+  1003→      previous: latest.result?.diff?.previous ?? null,
+  1004→      next: latest.result?.diff?.next ?? current.content,
+  1005→      replacedFrom: latest.result?.diff?.replacedFrom ?? null,
+  1006→      replacedTo: latest.result?.diff?.replacedTo ?? null,
+  1007→      approvalId: latest.id,
+  1008→      tool: latest.tool.name,
+  1009→      resolvedAt: latest.resolvedAt,
+  1010→    });
+  1011→  }
+  1012→
+  1013→  // Artifact renderer endpoint: returns a self-contained HTML document for
+  1014→  // any supported file type (image, markdown, json, code, svg, html).
+  1015→  if (method === "GET" && pathname === "/api/artifact") {
+  1016→    const filePath = url.searchParams.get("path") || "";
+  1017→    try {
+  1018→      const absolute = workspace.resolve(filePath);
+  1019→      const info = await stat(absolute);
+  1020→      if (!info.isFile()) return json(response, 400, { error: "Path is not a file" });
+  1021→      const html = await renderArtifact(absolute);
+  1022→      response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" });
+  1023→      response.end(html);
+  1024→      return;
+  1025→    } catch (error) { return json(response, 404, { error: error.message }); }
+  1026→  }
+  1027→
+  1028→  // SSE stream for file watcher events
+  1029→  if (method === "GET" && pathname === "/api/events") {
+  1030→    response.writeHead(200, {
+  1031→      "content-type": "text/event-stream",
+  1032→      "cache-control": "no-store",
+  1033→      "connection": "keep-alive",
+  1034→      "x-content-type-options": "nosniff",
+  1035→    });
+  1036→    response.write(`data: ${JSON.stringify({ type: "connected", at: new Date().toISOString() })}\n\n`);
+  1037→    watcherClients.add(response);
+  1038→    request.once("close", () => watcherClients.delete(response));
+  1039→    return;
+  1040→  }
+  1041→
+  1042→  if (method === "POST" && (pathname === "/api/agent/run" || pathname === "/api/chat")) {
+  1043→    const input = await body(request);
+  1044→    const sessionId = input.sessionId || "welcome";
+  1045→    await recordMessage(sessionId, "user", input.prompt);
+  1046→    response.writeHead(200, {
+  1047→      "content-type": "application/x-ndjson; charset=utf-8",
+  1048→      "cache-control": "no-store",
+  1049→      "x-content-type-options": "nosniff",
+  1050→    });
+  1051→    let open = true;
+  1052→    request.once("close", () => { open = false; });
+  1053→    const emit = (event) => {
+  1054→      if (open && !response.writableEnded) {
+  1055→        response.write(`${JSON.stringify(event)}\n`);
+  1056→        persistSessionEvent(sessionId, event).catch(() => {});
+  1057→      }
+  1058→    };
+  1059→    const result = await runner.run(input, emit);
+  1060→    if (result.text) await recordMessage(sessionId, "assistant", result.text);
+  1061→    if (!response.writableEnded) response.end();
+  1062→    return;
+  1063→  }
+  1064→
+  1065→  return json(response, 404, { error: "API route not found" });
+  1066→}
+  1067→
+  1068→const server = http.createServer(async (request, response) => {
+  1069→  const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+  1070→  // SECURITY (v0.9): rate limit all API requests per-IP.
+  1071→  if (url.pathname.startsWith("/api/")) {
+  1072→    const rl = applyRateLimit(rateLimiter, request, response);
+  1073→    if (!rl.allowed) {
+  1074→      return json(response, 429, { error: "Too many requests", retryAfter: Math.ceil(rl.retryAfterMs / 1000) });
+  1075→    }
+  1076→  }
+  1077→  try {
+  1078→    if (url.pathname.startsWith("/api/")) return await api(request, response, url);
+  1079→    if (await serveStatic(request, response, url.pathname, publicDir)) return;
+  1080→    if (request.method === "GET" && await serveStatic(request, response, "/", publicDir)) return;
+  1081→    json(response, 404, { error: "Not found" });
+  1082→  } catch (error) {
+  1083→    // SECURITY: never leak secrets in error messages.
+  1084→    const safeError = redactSecrets(error.message || "Internal error").redacted;
+  1085→    console.error(`[mooncode] ${request.method} ${url.pathname}:`, safeError);
+  1086→    if (!response.headersSent) json(response, error.status || 500, { error: safeError });
+  1087→    else if (!response.writableEnded) response.end();
+  1088→  }
+  1089→});
+  1090→
+  1091→server.listen(port, host, () => {
+  1092→  console.log(`Moon Code is ready at http://${host}:${port}`);
+  1093→  console.log(`Workspace: ${workspaceRoot}`);
+  1094→  // Warn the user if they're using the default demo workspace.
+  1095→  if (workspaceRoot === path.resolve(root, "workspace")) {
+  1096→    console.log(`\n⚠  You are using the demo workspace at ${workspaceRoot}`);
+  1097→    console.log(`   To work on your own project, restart with:`);
+  1098→    console.log(`   MOONCODE_WORKSPACE=/path/to/your/project npm run dev\n`);
+  1099→  }
+  1100→  // SECURITY: warn if bound to all interfaces.
+  1101→  if (host === "0.0.0.0") {
+  1102→    console.log(`\n⚠⚠  SECURITY WARNING: Moon Code is bound to 0.0.0.0 (all network interfaces).`);
+  1103→    console.log(`   Anyone on your network can access the agent's file/write/command tools.`);
+  1104→    console.log(`   This is intentionally restricted — to enable remote access you set BOTH:`);
+  1105→    console.log(`     MOONCODE_HOST=0.0.0.0 AND MOONCODE_ALLOW_REMOTE=1`);
+  1106→    console.log(`   If this was unintentional, restart without these env vars.\n`);
+  1107→  }
+  1108→});
+  1109→
+  1110→// Real-time collaboration over SSE + POST.
+  1111→// Each session maintains a list of SSE subscribers. Edits arrive via POST and
+  1112→// are broadcast to all subscribers. This avoids the need for a WebSocket
+  1113→// dependency while still providing push-based real-time updates.
+  1114→const collabSubscribers = new Map(); // sessionId -> Set<ServerResponse>
+  1115→
+  1116→collabRegistry.sessions.forEach = collabRegistry.sessions.forEach?.bind(collabRegistry.sessions);
+  1117→const origCreate = CollabRegistry.prototype.create;
+  1118→// Hook into session creation to wire up the broadcast on edit.
+  1119→const origEdit = CollabSession.prototype.edit;
+  1120→CollabSession.prototype.edit = function (peerId, operation) {
+  1121→  const op = origEdit.call(this, peerId, operation);
+  1122→  broadcastCollab(this.id, { type: "edit", ...op });
+  1123→  return op;
+  1124→};
+  1125→CollabSession.prototype.updateCursor = function (peerId, cursor) {
+  1126→  this.peers.get(peerId).cursor = cursor;
+  1127→  this.emit("cursor", { peerId, ...cursor });
+  1128→  broadcastCollab(this.id, { type: "cursor", peerId, cursor });
+  1129→};
+  1130→
+  1131→function broadcastCollab(sessionId, message) {
+  1132→  const subs = collabSubscribers.get(sessionId);
+  1133→  if (!subs) return;
+  1134→  const payload = `data: ${JSON.stringify(message)}\n\n`;
+  1135→  for (const sub of subs) {
+  1136→    try { sub.write(payload); } catch {}
+  1137→  }
+  1138→}
+  1139→
+  1140→function shutdown(signal) {
+  1141→  console.log(`\n${signal}: closing Moon Code`);
+  1142→  ptyRegistry.closeAll();
+  1143→  mcpRegistry.closeAll();
+  1144→  watcher.close();
+  1145→  rateLimiter.close();
+  1146→  for (const session of collabRegistry.sessions.values()) session.removeAllListeners();
+  1147→  server.close(() => process.exit(0));
+  1148→  setTimeout(() => process.exit(1), 5_000).unref();
+  1149→}
+  1150→process.on("SIGINT", () => shutdown("SIGINT"));
+  1151→process.on("SIGTERM", () => shutdown("SIGTERM"));
+  1152→
+  1153→// v0.9.1: parseMultipart, guessMimeFromName, guessMimeFromContentType,
+  1154→// buildFillInMiddlePrompt, computeHeuristicSuggestion were extracted to ./lib.js
+  1155→// and are imported at the top of this file. No local definitions remain.
+  1156→
