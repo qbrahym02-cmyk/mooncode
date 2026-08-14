@@ -1,18 +1,18 @@
 {
   "name": "@mooncode/desktop",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Moon Code desktop app — local-first agentic workspace",
-  "main": "src/main.cjs",
+  "main": "app/src/main.cjs",
   "scripts": {
     "start": "electron .",
     "start:dev": "cross-env MOONCODE_DESKTOP=1 electron .",
-    "package": "electron-builder",
-    "package:all": "electron-builder -mwl",
-    "package:mac": "electron-builder --mac",
-    "package:win": "electron-builder --win",
-    "package:linux": "electron-builder --linux",
-    "package:publish": "electron-builder -mwl --publish always"
+    "prepare": "node prepare.mjs",
+    "package": "node prepare.mjs && electron-builder",
+    "package:all": "node prepare.mjs && electron-builder -mwl",
+    "package:mac": "node prepare.mjs && electron-builder --mac",
+    "package:win": "node prepare.mjs && electron-builder --win",
+    "package:linux": "node prepare.mjs && electron-builder --linux"
   },
   "devDependencies": {
     "electron": "^37.2.0",
@@ -25,23 +25,21 @@
     "copyright": "Copyright © 2026 Brahim",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "directories": {
+      "app": "app",
       "output": "dist",
       "buildResources": "build"
     },
     "files": [
       "src/**/*",
-      "../../apps/web/public/**/*",
-      "../../apps/server/src/**/*",
-      "../../packages/**/*",
-      "../../scripts/ops.mjs",
-      "../../brand.json",
-      "../../.env.example"
-    ],
-    "extraResources": [
-      {
-        "from": "../../docs",
-        "to": "docs"
-      }
+      "web/**/*",
+      "server/**/*",
+      "tui/**/*",
+      "cli/**/*",
+      "packages/**/*",
+      "docs/**/*",
+      "package.json",
+      "brand.json",
+      ".env.example"
     ],
     "mac": {
       "target": [
@@ -49,11 +47,9 @@
         { "target": "zip", "arch": ["x64", "arm64"] }
       ],
       "category": "public.app-category.developer-tools",
-      "icon": "build/icon.icns",
-      "hardenedRuntime": true,
+      "icon": "build/icon.png",
+      "hardenedRuntime": false,
       "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
       "darkModeSupport": true,
       "minimumSystemVersion": "10.13"
     },
@@ -69,17 +65,14 @@
         { "target": "nsis", "arch": ["x64"] },
         { "target": "portable", "arch": ["x64"] }
       ],
-      "icon": "build/icon.ico",
+      "icon": "build/icon.png",
       "publisherName": "Moon Code",
       "verifyUpdateCodeSignature": false
     },
     "nsis": {
-      "oneClick": false,
+      "oneClick": true,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
-      "installerHeaderIcon": "build/icon.ico",
+      "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Moon Code"
@@ -90,27 +83,20 @@
     "linux": {
       "target": [
         { "target": "AppImage", "arch": ["x64"] },
-        { "target": "deb", "arch": ["x64"] },
-        { "target": "tar.gz", "arch": ["x64"] }
+        { "target": "deb", "arch": ["x64"] }
       ],
       "category": "Development",
       "icon": "build/icon.png",
       "maintainer": "Brahim <qbrahym02-cmyk@users.noreply.github.com>",
       "vendor": "Moon Code",
       "synopsis": "Local-first agentic workspace for code and design",
-      "description": "Moon Code is a local-first agentic workspace for code and design. It runs an agent that can read, write, and execute on your local files with explicit approval for every consequential action."
+      "description": "Moon Code is a local-first agentic workspace for code and design."
     },
     "AppImage": {
       "artifactName": "${productName}-${version}-${arch}.AppImage"
     },
     "deb": {
-      "depends": ["git", "libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libdrm2", "libgbm1", "libasound2"]
-    },
-    "publish": {
-      "provider": "github",
-      "owner": "qbrahym02-cmyk",
-      "repo": "mooncode",
-      "releaseType": "release"
+      "depends": ["git"]
     }
   }
 }

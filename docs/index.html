@@ -375,7 +375,7 @@
     <section class="hero">
       <div class="hero-badge">
         <span class="pulse"></span>
-        <span>إصدار 1.1.0 متاح — مع تحديث تلقائي من أي مكان</span>
+        <span>إصدار 1.2.0 متاح — مع تحديث تلقائي من أي مكان</span>
       </div>
       <h1>مون كود<br><span class="gradient-text">مساحة عمل الوكلاء</span></h1>
       <p class="hero-tagline">
@@ -531,12 +531,12 @@
         </div>
         <div class="terminal-body" id="terminal">
           <div class="terminal-line"><span class="terminal-prompt">$</span> <span class="terminal-cmd">npx mooncode</span></div>
-          <div class="terminal-output">🌙 Moon Code v1.1.0 — مساحة عمل الوكلاء</div>
+          <div class="terminal-output">🌙 Moon Code v1.2.0 — مساحة عمل الوكلاء</div>
           <div class="terminal-output">→ جارٍ التثبيت...</div>
           <div class="terminal-success">✓ تم التثبيت بنجاح!</div>
           <div class="terminal-line">&nbsp;</div>
           <div class="terminal-line"><span class="terminal-prompt">$</span> <span class="terminal-cmd">mooncode start</span></div>
-          <div class="terminal-output">▰ ▰  MOON CODE v1.1.0</div>
+          <div class="terminal-output">▰ ▰  MOON CODE v1.2.0</div>
           <div class="terminal-output">  workspace  /Users/you/my-project</div>
           <div class="terminal-output">  server     http://127.0.0.1:4173</div>
           <div class="terminal-output">  provider   openai</div>
@@ -710,7 +710,7 @@
         if (!res.ok) return;
         const release = await res.json();
         const latest = (release.tag_name || '').replace(/^v/, '');
-        const current = '1.1.0';
+        const current = '1.2.0';
         const pa = latest.split('.').map(Number);
         const pb = current.split('.').map(Number);
         let newer = false;
