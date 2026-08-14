@@ -1,29 +1,31 @@
 import http from "node:http";
 import { writeFile, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AgentRunner } from "../../../packages/agent/src/index.js";
-import { providerCatalog, callModel } from "../../../packages/providers/src/index.js";
-import { JsonStore } from "../../../packages/storage/src/index.js";
-import { Workspace } from "../../../packages/tools/src/index.js";
-import { Git } from "../../../packages/git/src/index.js";
-import { PtyRegistry } from "../../../packages/pty/src/index.js";
-import { FileWatcher } from "../../../packages/watcher/src/index.js";
-import { renderArtifact, detectKind } from "../../../packages/artifacts/src/index.js";
-import { ContextFiles, Compactor } from "../../../packages/context/src/index.js";
-import { McpRegistry } from "../../../packages/mcp/src/index.js";
-import { SkillRegistry, BUILTIN_SKILLS } from "../../../packages/skills/src/index.js";
-import { DesignTokens } from "../../../packages/design/src/index.js";
-import { AutoFix, diagnoseError } from "../../../packages/autofix/src/index.js";
-import { SearchIndex } from "../../../packages/search-index/src/index.js";
-import { TodoList } from "../../../packages/todos/src/index.js";
-import { LspDiagnostics } from "../../../packages/lsp/src/index.js";
-import { PluginRegistry } from "../../../packages/plugins/src/index.js";
-import { CollabRegistry, CollabSession } from "../../../packages/collab/src/index.js";
-import { PluginSigner, TrustRegistry } from "../../../packages/security/src/index.js";
-import { AuditLog } from "../../../packages/security/src/audit.js";
-import { RateLimiter, applyRateLimit } from "../../../packages/security/src/rate-limit.js";
-import { redactSecrets } from "../../../packages/security/src/secrets.js";
+import os from "node:os";
+import { AgentRunner } from "../../packages/agent/src/index.js";
+import { providerCatalog, callModel } from "../../packages/providers/src/index.js";
+import { JsonStore } from "../../packages/storage/src/index.js";
+import { Workspace } from "../../packages/tools/src/index.js";
+import { Git } from "../../packages/git/src/index.js";
+import { PtyRegistry } from "../../packages/pty/src/index.js";
+import { FileWatcher } from "../../packages/watcher/src/index.js";
+import { renderArtifact, detectKind } from "../../packages/artifacts/src/index.js";
+import { ContextFiles, Compactor } from "../../packages/context/src/index.js";
+import { McpRegistry } from "../../packages/mcp/src/index.js";
+import { SkillRegistry, BUILTIN_SKILLS } from "../../packages/skills/src/index.js";
+import { DesignTokens } from "../../packages/design/src/index.js";
+import { AutoFix, diagnoseError } from "../../packages/autofix/src/index.js";
+import { SearchIndex } from "../../packages/search-index/src/index.js";
+import { TodoList } from "../../packages/todos/src/index.js";
+import { LspDiagnostics } from "../../packages/lsp/src/index.js";
+import { PluginRegistry } from "../../packages/plugins/src/index.js";
+import { CollabRegistry, CollabSession } from "../../packages/collab/src/index.js";
+import { PluginSigner, TrustRegistry } from "../../packages/security/src/index.js";
+import { AuditLog } from "../../packages/security/src/audit.js";
+import { RateLimiter, applyRateLimit } from "../../packages/security/src/rate-limit.js";
+import { redactSecrets } from "../../packages/security/src/secrets.js";
 // v0.9.1: extracted helpers into lib.js to reduce server.js size.
 import {
   json, body, serveStatic,
@@ -34,10 +36,36 @@ import {
 } from "./lib.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(here, "../../..");
-const publicDir = path.join(root, "apps/web/public");
-const workspaceRoot = path.resolve(root, process.env.MOONCODE_WORKSPACE || "workspace");
-const dataRoot = path.resolve(root, process.env.MOONCODE_DATA || ".mooncode");
+
+// Detect environment: dev monorepo vs packaged desktop app.
+// In dev: here = apps/server/src/, root = monorepo root (3 levels up).
+// In packaged app (asar:false): here = resources/app/server/src/,
+//   root = resources/app/ (2 levels up, because the app structure is flat).
+function findRoot() {
+  // Try dev monorepo first (3 levels up)
+  const devRoot = path.resolve(here, "../../..");
+  if (existsSync(path.join(devRoot, "apps", "web", "public"))) {
+    return devRoot;
+  }
+  // Try packaged app (2 levels up: resources/app/)
+  const packagedRoot = path.resolve(here, "../..");
+  if (existsSync(path.join(packagedRoot, "web", "public"))) {
+    return packagedRoot;
+  }
+  // Fallback: use dev root
+  return devRoot;
+}
+
+const root = findRoot();
+// publicDir differs between dev and packaged:
+// - dev: root/apps/web/public
+// - packaged: root/web/public
+const publicDir = existsSync(path.join(root, "apps", "web", "public"))
+  ? path.join(root, "apps", "web", "public")
+  : path.join(root, "web", "public");
+
+const workspaceRoot = path.resolve(process.env.MOONCODE_WORKSPACE || path.join(os.homedir(), "MoonCode"));
+const dataRoot = path.resolve(process.env.MOONCODE_DATA || path.join(os.homedir(), "MoonCode", ".mooncode"));
 const uploadsRoot = path.join(dataRoot, "uploads");
 // SECURITY (v0.9): bind to localhost by default. Binding to 0.0.0.0 exposes
 // the agent's file/write/command tools to anyone on the network. Users who

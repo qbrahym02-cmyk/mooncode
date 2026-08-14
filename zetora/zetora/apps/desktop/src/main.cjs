@@ -31,25 +31,32 @@ function logError(...args) {
 
 // ─── Server lifecycle ───────────────────────────────────────────────────────
 function getServerEntry() {
-  // The app structure after `prepare.mjs` is:
-  //   app/src/main.cjs       (this file)
-  //   app/server/src/server.js
-  //   app/packages/...
-  //   app/web/public/...
+  // The app structure after `prepare.mjs` (with asar: false) is:
+  //   resources/app/src/main.cjs       (this file)
+  //   resources/app/server/src/server.js
+  //   resources/app/packages/...
+  //   resources/app/web/public/...
   // In dev (no prepare), the structure is:
-  //   apps/desktop/src/main.cjs  (this file)
-  //   apps/server/src/server.js
+  //   apps/desktop/src/main.cjs       (this file)
+  //   apps/server/src/server.js       (monorepo)
   //   packages/...
   const candidates = [
-    path.resolve(__dirname, '../server/src/server.js'),           // packaged (app/server/src)
-    path.resolve(__dirname, '../../server/src/server.js'),         // dev monorepo (apps/server/src)
-    path.resolve(__dirname, '../../../apps/server/src/server.js'), // alt dev
-    path.join(process.resourcesPath, 'app/server/src/server.js'),  // extraResources fallback
+    path.resolve(__dirname, '../server/src/server.js'),            // packaged: app/server/src
+    path.resolve(__dirname, '../../server/src/server.js'),          // dev: apps/server/src
+    path.resolve(__dirname, '../../../apps/server/src/server.js'),  // alt dev
+    path.join(process.resourcesPath, 'app', 'server', 'src', 'server.js'), // extraResources
+    path.join(process.resourcesPath, 'server', 'src', 'server.js'),       // flat extraResources
   ];
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
+    if (fs.existsSync(candidate)) {
+      log('Server entry:', candidate);
+      return candidate;
+    }
   }
-  logError('Could not find server entry. Tried:', candidates);
+  logError('Could not find server entry. Tried:');
+  candidates.forEach((c) => logError('  ', c));
+  logError('__dirname:', __dirname);
+  logError('resourcesPath:', process.resourcesPath || '(undefined)');
   return candidates[0];
 }
 
@@ -62,13 +69,25 @@ function startLocalServer() {
   const serverEntry = getServerEntry();
   log('Starting local server:', serverEntry);
 
+  if (!fs.existsSync(serverEntry)) {
+    const msg = `Server entry not found:\n\n${serverEntry}\n\n__dirname: ${__dirname}\nresourcesPath: ${process.resourcesPath || '(undefined)'}`;
+    logError(msg);
+    dialog.showErrorBox('Moon Code — Server Not Found', msg);
+    app.quit();
+    return null;
+  }
+
   const env = {
     ...process.env,
     MOONCODE_HOST: '127.0.0.1',
     MOONCODE_PORT: port,
     MOONCODE_DESKTOP: '1',
     NODE_ENV: isDev ? 'development' : 'production',
+    // Ensure Electron's Node.js can find the modules
+    NODE_PATH: path.resolve(__dirname, '..', 'node_modules'),
   };
+
+  let serverErrorOutput = '';
 
   server = fork(serverEntry, [], {
     env,
@@ -81,11 +100,19 @@ function startLocalServer() {
   });
   server.stderr?.on('data', (data) => {
     const text = data.toString().trim();
-    if (text) logError('[server]', text);
+    if (text) {
+      serverErrorOutput += text + '\n';
+      logError('[server]', text);
+    }
   });
   server.on('exit', (code, signal) => {
     log(`Server exited (code=${code}, signal=${signal})`);
     server = null;
+    if (code !== 0 && code !== null) {
+      const errorMsg = `Moon Code server crashed (exit code ${code}).\n\nError output:\n${serverErrorOutput.slice(-1000)}`;
+      logError(errorMsg);
+      dialog.showErrorBox('Moon Code — Server Crashed', errorMsg);
+    }
   });
   server.on('error', (error) => {
     logError('Server error:', error.message);
@@ -96,17 +123,25 @@ function startLocalServer() {
 }
 
 async function waitForServer(url, retries = 100) {
+  let lastError = '';
   for (let i = 0; i < retries; i += 1) {
+    // Check if the server process died
+    if (server === null) {
+      throw new Error(`Moon Code server process exited unexpectedly.\n\n${lastError}`);
+    }
     try {
       const response = await fetch(`${url}/api/health`);
       if (response.ok) {
         log('Server is healthy');
         return;
       }
-    } catch {}
+      lastError = `HTTP ${response.status}`;
+    } catch (error) {
+      lastError = error.message;
+    }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error(`Moon Code local service did not start at ${url} after ${retries} retries`);
+  throw new Error(`Moon Code local service did not start at ${url} after ${retries} retries.\n\nLast error: ${lastError}`);
 }
 
 async function stopServer() {
