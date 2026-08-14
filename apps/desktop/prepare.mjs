@@ -8,7 +8,7 @@
  *
  * Run this before `electron-builder`.
  */
-import { cpSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync, existsSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,15 +25,23 @@ console.log(`  app dir:  ${appDir}`);
 if (existsSync(appDir)) rmSync(appDir, { recursive: true, force: true });
 mkdirSync(appDir, { recursive: true });
 
+// Helper to copy if exists.
+function copyIfExists(src, dest) {
+  if (existsSync(src)) {
+    cpSync(src, dest, { recursive: true });
+    return true;
+  }
+  return false;
+}
+
 // Copy the desktop main process.
 cpSync(path.join(desktopDir, "src"), path.join(appDir, "src"), { recursive: true });
 
 // Copy the web client (static files served by the server).
-cpSync(path.join(monorepoRoot, "apps/web/public"), path.join(appDir, "web", "public"), { recursive: true });
+copyIfExists(path.join(monorepoRoot, "apps/web/public"), path.join(appDir, "web", "public"));
 
 // Copy the server source.
 cpSync(path.join(monorepoRoot, "apps/server/src"), path.join(appDir, "server", "src"), { recursive: true });
-cpSync(path.join(monorepoRoot, "apps/server/src/lib.js"), path.join(appDir, "server", "src", "lib.js"));
 
 // Copy the TUI source.
 cpSync(path.join(monorepoRoot, "apps/tui/src"), path.join(appDir, "tui", "src"), { recursive: true });
@@ -45,42 +53,34 @@ cpSync(path.join(monorepoRoot, "apps/cli/src"), path.join(appDir, "cli", "src"),
 cpSync(path.join(monorepoRoot, "packages"), path.join(appDir, "packages"), { recursive: true });
 
 // Copy root-level files needed at runtime.
-const rootFiles = ["package.json", "brand.json", ".env.example"];
-for (const file of rootFiles) {
-  const src = path.join(monorepoRoot, file);
-  if (existsSync(src)) cpSync(src, path.join(appDir, file));
+for (const file of ["package.json", "brand.json", ".env.example"]) {
+  copyIfExists(path.join(monorepoRoot, file), path.join(appDir, file));
 }
 
 // Copy docs as extra resources.
-cpSync(path.join(monorepoRoot, "docs"), path.join(appDir, "docs"), { recursive: true });
+copyIfExists(path.join(monorepoRoot, "docs"), path.join(appDir, "docs"));
 
 // Create a minimal package.json for the app dir (electron needs it).
-import { writeFileSync } from "node:fs";
 const appPkg = {
   name: "mooncode-desktop-app",
-  version: "1.2.0",
+  version: "1.2.2",
   private: true,
   main: "src/main.cjs",
-  type: "commonjs",
 };
 writeFileSync(path.join(appDir, "package.json"), JSON.stringify(appPkg, null, 2) + "\n", "utf8");
 
-console.log("✓ Desktop app prepared.");
-console.log(`  Files in app/: ${countFiles(appDir)} files`);
-
+// Count files for verification.
 function countFiles(dir) {
   let count = 0;
-  const walk = (d) => {
-    for (const entry of readdirSync(d)) {
-      const full = path.join(d, entry.name);
-      if (entry.isDirectory()) walk(full);
+  try {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) count += countFiles(full);
       else count += 1;
     }
-  };
-  try { walk(dir); } catch {}
+  } catch {}
   return count;
 }
-function readdirSync(d) {
-  try { return require("fs").readdirSync(d, { withFileTypes: true }); }
-  catch { return []; }
-}
+
+console.log("✓ Desktop app prepared.");
+console.log(`  Files in app/: ${countFiles(appDir)} files`);

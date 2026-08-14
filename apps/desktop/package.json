@@ -1,13 +1,13 @@
 {
   "name": "@mooncode/desktop",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "private": true,
   "description": "Moon Code desktop app — local-first agentic workspace",
   "main": "app/src/main.cjs",
   "scripts": {
     "start": "electron .",
     "start:dev": "cross-env MOONCODE_DESKTOP=1 electron .",
-    "prepare": "node prepare.mjs",
+    "build:prepare": "node prepare.mjs",
     "package": "node prepare.mjs && electron-builder",
     "package:all": "node prepare.mjs && electron-builder -mwl",
     "package:mac": "node prepare.mjs && electron-builder --mac",

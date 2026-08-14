@@ -152,7 +152,7 @@ async function api(request, response, url) {
     return json(response, 200, {
       ok: true,
       service: "mooncode",
-      version: "1.2.1",
+      version: "1.2.2",
       uptime: Math.round(process.uptime()),
       workspace: workspaceRoot,
       isDemoWorkspace: workspaceRoot === path.resolve(root, "workspace"),
