@@ -13,7 +13,10 @@
 </head>
 <body>
   <div id="app" class="app-shell" data-inspector="true" data-sidebar="true">
-    <aside class="activity-rail" aria-label="التنقل الرئيسي">
+    <!-- v3.2.0: Tab bar for multi-session -->
+    <div id="tab-bar" style="position:fixed;top:0;left:56px;right:0;z-index:50;"></div>
+
+    <aside class="activity-rail" aria-label="التنقل الرئيسي" style="margin-top:36px;">
       <button class="brand-mark" data-action="home" aria-label="Moon Code home">
         <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 5h8v8H7zM17 5h8v8h-8zM7 15h8v12H7zM17 15h8v5h-8zM17 22h8v5h-8z"/></svg>
       </button>

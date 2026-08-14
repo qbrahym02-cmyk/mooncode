@@ -200,7 +200,84 @@ async function api(request, response, url) {
     });
   }
 
-  // v1.1.0: Update check endpoint — lets the UI show update notifications.
+  // v3.2.0: LSP endpoints — hover, definition, references, symbols.
+  if (method === "GET" && pathname === "/api/lsp/hover") {
+    const file = url.searchParams.get("file");
+    const line = parseInt(url.searchParams.get("line") || "0", 10);
+    const character = parseInt(url.searchParams.get("character") || "0", 10);
+    if (!file) return json(response, 400, { error: "file parameter required" });
+    try {
+      const { LspManager } = await import("../../packages/lsp/src/client.js");
+      const mgr = new LspManager(workspaceRoot);
+      const hover = await mgr.hover(file, line, character);
+      mgr.close();
+      return json(response, 200, { hover });
+    } catch (error) {
+      return json(response, 200, { hover: null, error: error.message });
+    }
+  }
+
+  if (method === "GET" && pathname === "/api/lsp/symbols") {
+    const query = url.searchParams.get("q") || "";
+    try {
+      const { LspManager } = await import("../../packages/lsp/src/client.js");
+      const mgr = new LspManager(workspaceRoot);
+      const client = await mgr.ensureServer("dummy.ts");
+      if (!client) return json(response, 200, { symbols: [] });
+      const symbols = await client.workspaceSymbols(query);
+      mgr.close();
+      return json(response, 200, { symbols: symbols || [] });
+    } catch (error) {
+      return json(response, 200, { symbols: [], error: error.message });
+    }
+  }
+
+  // v3.2.0: Session fork endpoint.
+  if (method === "POST" && pathname === "/api/session/fork") {
+    const body = await body(request);
+    const { sessionId, messageId } = body;
+    const { forkSession } = await import("../../packages/session/src/index.js");
+    const state = await stateStore.read();
+    const session = (state.sessions || []).find((s) => s.id === sessionId);
+    if (!session) return json(response, 404, { error: "Session not found" });
+    const forked = forkSession(session, messageId);
+    await stateStore.update((s) => { s.sessions.unshift(forked); return s; });
+    return json(response, 200, forked);
+  }
+
+  // v3.2.0: Share link endpoint.
+  if (method === "POST" && pathname === "/api/session/share") {
+    const body = await body(request);
+    const { sessionId } = body;
+    const { createShareLink } = await import("../../packages/session/src/index.js");
+    const state = await stateStore.read();
+    const session = (state.sessions || []).find((s) => s.id === sessionId);
+    if (!session) return json(response, 404, { error: "Session not found" });
+    const share = await createShareLink(sessionId, session);
+    return json(response, 200, share);
+  }
+
+  // v3.2.0: ChatGPT login endpoint.
+  if (method === "POST" && pathname === "/api/auth/chatgpt/login") {
+    const { loginWithChatGPT } = await import("../../packages/auth/src/index.js");
+    const { url: authUrl, promise } = loginWithChatGPT();
+    const result = await promise.catch((e) => ({ ok: false, error: e.message }));
+    return json(response, 200, { url: authUrl, ...result });
+  }
+
+  // v3.2.0: Copilot login endpoint.
+  if (method === "POST" && pathname === "/api/auth/copilot/login") {
+    const { loginWithCopilot } = await import("../../packages/auth/src/index.js");
+    const result = await loginWithCopilot();
+    const authResult = await result.promise.catch((e) => ({ ok: false, error: e.message }));
+    return json(response, 200, { userCode: result.userCode, verificationUri: result.verificationUri, ...authResult });
+  }
+
+  // v3.2.0: Theme list endpoint.
+  if (method === "GET" && pathname === "/api/themes") {
+    const { getThemeList } = await import("../../packages/design/src/themes.js");
+    return json(response, 200, { themes: getThemeList() });
+  }
   if (method === "GET" && pathname === "/api/updates/check") {
     try {
       const releaseResponse = await fetch("https://api.github.com/repos/qbrahym02-cmyk/mooncode/releases/latest", {

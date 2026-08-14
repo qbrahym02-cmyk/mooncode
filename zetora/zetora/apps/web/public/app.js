@@ -1229,3 +1229,229 @@ async function bootstrap() {
 if (innerWidth < 680) $('#app').dataset.sidebar = 'false';
 resizePrompt();
 bootstrap();
+
+// ════════════════════════════════════════════════════════════════════════════
+// v3.2.0: Multi-tab sessions + Virtualized timeline
+// ════════════════════════════════════════════════════════════════════════════
+
+// ─── Multi-tab manager ───
+const tabs = new Map(); // sessionId → { id, title, active, element }
+let activeTabId = null;
+
+function openTab(sessionId, title) {
+  if (tabs.has(sessionId)) {
+    setActiveTab(sessionId);
+    return;
+  }
+  tabs.set(sessionId, { id: sessionId, title: title || 'New Session', active: false });
+  renderTabs();
+  setActiveTab(sessionId);
+}
+
+function closeTab(sessionId) {
+  tabs.delete(sessionId);
+  if (activeTabId === sessionId) {
+    const remaining = [...tabs.keys()];
+    if (remaining.length > 0) setActiveTab(remaining[0]);
+  }
+  renderTabs();
+}
+
+function setActiveTab(sessionId) {
+  activeTabId = sessionId;
+  for (const tab of tabs.values()) tab.active = (tab.id === sessionId);
+  renderTabs();
+  // Load the session
+  if (window.loadSession) window.loadSession(sessionId);
+}
+
+function renderTabs() {
+  const container = document.getElementById('tab-bar');
+  if (!container) return;
+  container.innerHTML = '';
+  for (const tab of tabs.values()) {
+    const el = document.createElement('div');
+    el.className = `tab-item ${tab.active ? 'is-active' : ''}`;
+    el.innerHTML = `<span class="tab-title">${escapeHtml(tab.title)}</span><button class="tab-close" onclick="event.stopPropagation();closeTab('${tab.id}')">×</button>`;
+    el.onclick = () => setActiveTab(tab.id);
+    container.appendChild(el);
+  }
+}
+
+// ─── Virtualized timeline ───
+class VirtualTimeline {
+  constructor(container, itemHeight = 80) {
+    this.container = container;
+    this.itemHeight = itemHeight;
+    this.items = [];
+    this.visibleStart = 0;
+    this.visibleEnd = 0;
+    this.container.addEventListener('scroll', () => this.render(), { passive: true });
+  }
+
+  setItems(items) {
+    this.items = items;
+    this.container.querySelector('.virtual-spacer-top')?.remove();
+    this.container.querySelector('.virtual-spacer-bottom')?.remove();
+    this.render();
+  }
+
+  render() {
+    const scrollTop = this.container.scrollTop;
+    const viewportHeight = this.container.clientHeight;
+    const start = Math.max(0, Math.floor(scrollTop / this.itemHeight) - 2);
+    const end = Math.min(this.items.length, Math.ceil((scrollTop + viewportHeight) / this.itemHeight) + 2);
+
+    // Only re-render if the visible range changed
+    if (start === this.visibleStart && end === this.visibleEnd) return;
+    this.visibleStart = start;
+    this.visibleEnd = end;
+
+    // Create/update spacers
+    let topSpacer = this.container.querySelector('.virtual-spacer-top');
+    let bottomSpacer = this.container.querySelector('.virtual-spacer-bottom');
+    if (!topSpacer) {
+      topSpacer = document.createElement('div');
+      topSpacer.className = 'virtual-spacer-top';
+      this.container.insertBefore(topSpacer, this.container.firstChild);
+    }
+    if (!bottomSpacer) {
+      bottomSpacer = document.createElement('div');
+      bottomSpacer.className = 'virtual-spacer-bottom';
+      this.container.appendChild(bottomSpacer);
+    }
+
+    topSpacer.style.height = `${start * this.itemHeight}px`;
+    bottomSpacer.style.height = `${(this.items.length - end) * this.itemHeight}px`;
+
+    // Render visible items
+    const content = this.container.querySelector('.timeline-content') || (() => {
+      const div = document.createElement('div');
+      div.className = 'timeline-content';
+      this.container.appendChild(div);
+      return div;
+    })();
+
+    content.innerHTML = '';
+    for (let i = start; i < end; i++) {
+      const item = this.items[i];
+      if (!item) continue;
+      const el = this.renderItem(item, i);
+      content.appendChild(el);
+    }
+  }
+
+  renderItem(item, index) {
+    const el = document.createElement('div');
+    el.className = `message message-${item.role}`;
+    el.style.height = `${this.itemHeight}px`;
+    el.innerHTML = item.html || `<div class="message-bubble">${escapeHtml(item.content || '')}</div>`;
+    return el;
+  }
+
+  scrollToIndex(index) {
+    this.container.scrollTop = index * this.itemHeight;
+  }
+}
+
+// ─── Theme switcher ───
+async function loadThemes() {
+  try {
+    const res = await fetch('/api/themes');
+    const data = await res.json();
+    return data.themes || [];
+  } catch { return []; }
+}
+
+async function applyTheme(themeId) {
+  const themes = await loadThemes();
+  const { getTheme, themeToCSS } = await import('/packages/design/src/themes.js').catch(() => ({}));
+  // Apply via CSS variables
+  const theme = themes.find(t => t.id === themeId);
+  if (theme) {
+    document.documentElement.setAttribute('data-theme', themeId);
+    localStorage.setItem('mooncode-theme', themeId);
+  }
+}
+
+// ─── LSP: hover + definition ───
+async function lspHover(filePath, line, character) {
+  try {
+    const res = await fetch(`/api/lsp/hover?file=${encodeURIComponent(filePath)}&line=${line}&character=${character}`);
+    const data = await res.json();
+    return data.hover;
+  } catch { return null; }
+}
+
+// ─── Share link ───
+async function shareSession(sessionId) {
+  try {
+    const res = await fetch('/api/session/share', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId }),
+    });
+    const data = await res.json();
+    if (data.url) {
+      navigator.clipboard.writeText(data.url);
+      showToast('Share link copied to clipboard!');
+    }
+    return data;
+  } catch (error) {
+    showToast('Failed to create share link');
+    return null;
+  }
+}
+
+// ─── Fork session ───
+async function forkSessionFromMessage(sessionId, messageId) {
+  try {
+    const res = await fetch('/api/session/fork', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId, messageId }),
+    });
+    const forked = await res.json();
+    if (forked.id) {
+      openTab(forked.id, forked.title);
+      showToast('Session forked!');
+    }
+    return forked;
+  } catch (error) {
+    showToast('Failed to fork session');
+    return null;
+  }
+}
+
+// ─── ChatGPT / Copilot login ───
+async function loginChatGPT() {
+  try {
+    const res = await fetch('/api/auth/chatgpt/login', { method: 'POST' });
+    const data = await res.json();
+    if (data.url) window.open(data.url, '_blank');
+    return data;
+  } catch (error) {
+    showToast('ChatGPT login failed');
+    return null;
+  }
+}
+
+async function loginCopilot() {
+  try {
+    const res = await fetch('/api/auth/copilot/login', { method: 'POST' });
+    const data = await res.json();
+    if (data.verificationUri) {
+      showToast(`Go to ${data.verificationUri} and enter code: ${data.userCode}`);
+    }
+    return data;
+  } catch (error) {
+    showToast('Copilot login failed');
+    return null;
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
