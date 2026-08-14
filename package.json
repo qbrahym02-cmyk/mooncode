@@ -1,6 +1,6 @@
 {
   "name": "mooncode",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "private": true,
   "description": "Local-first agentic workspace for code and design",
   "type": "module",
