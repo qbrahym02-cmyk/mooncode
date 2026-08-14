@@ -66,6 +66,12 @@ const appPkg = {
   name: "mooncode-desktop-app",
   version: "1.2.4",
   private: true,
+  description: "Moon Code — local-first agentic workspace for code and design",
+  author: {
+    name: "Brahim",
+    email: "qbrahym02-cmyk@users.noreply.github.com",
+  },
+  homepage: "https://github.com/qbrahym02-cmyk/mooncode",
   main: "src/main.cjs",
 };
 writeFileSync(path.join(appDir, "package.json"), JSON.stringify(appPkg, null, 2) + "\n", "utf8");
