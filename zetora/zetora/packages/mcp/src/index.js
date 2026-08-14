@@ -186,6 +186,36 @@ export class McpError extends Error {
   }
 }
 
+// v3.1.0: StreamableHTTP transport — connect to remote MCP servers over HTTP.
+export async function connectMcpHTTP(url, options = {}) {
+  const initResponse = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(options.headers || {}) },
+    body: JSON.stringify({
+      jsonrpc: "2.0", id: 1, method: "initialize",
+      params: { protocolVersion: PROTOCOL_VERSION, capabilities: { roots: { listChanged: false } }, clientInfo: { name: "mooncode", version: "3.1.0" } },
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!initResponse.ok) throw new Error(`HTTP MCP init failed: ${initResponse.status}`);
+  const initData = await initResponse.json();
+  return { serverInfo: initData.result?.serverInfo, capabilities: initData.result?.capabilities, url, headers: options.headers || {} };
+}
+
+// v3.1.0: MCP Resource tools — auto-added when servers expose resources.
+export const MCP_RESOURCE_TOOLS = [
+  {
+    name: "list_mcp_resources",
+    description: "List resources exposed by MCP servers.",
+    inputSchema: { type: "object", properties: { serverId: { type: "string" } }, additionalProperties: false },
+  },
+  {
+    name: "read_mcp_resource",
+    description: "Read a specific MCP resource by URI.",
+    inputSchema: { type: "object", properties: { uri: { type: "string" } }, required: ["uri"], additionalProperties: false },
+  },
+];
+
 /**
  * Registry of running MCP clients, configured via `.mooncode/mcp.json`.
  * The schema is an object whose keys are server ids and values are
