@@ -2,7 +2,12 @@
   "name": "@mooncode/desktop",
   "version": "1.2.4",
   "private": true,
-  "description": "Moon Code desktop app — local-first agentic workspace",
+  "description": "Moon Code desktop app — local-first agentic workspace for code and design",
+  "author": {
+    "name": "Brahim",
+    "email": "qbrahym02-cmyk@users.noreply.github.com"
+  },
+  "homepage": "https://github.com/qbrahym02-cmyk/mooncode",
   "main": "app/src/main.cjs",
   "scripts": {
     "start": "electron .",
@@ -66,8 +71,8 @@
         { "target": "portable", "arch": ["x64"] }
       ],
       "icon": "build/icon.png",
-      "publisherName": "Moon Code",
-      "verifyUpdateCodeSignature": false
+      "signtoolOptions": null,
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": true,

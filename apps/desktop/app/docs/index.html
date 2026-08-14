@@ -676,10 +676,9 @@
         const assets = release.assets || [];
 
         const findAsset = (pattern) => assets.find(a => pattern.test(a.name));
-        // v1.2.4: prefer the real desktop apps (.AppImage, .dmg, .exe)
-        const linuxAsset = findAsset(/MoonCode.*linux\.(AppImage|deb)/i) || findAsset(/linux/i);
-        const macAsset = findAsset(/\.dmg$/i) || findAsset(/macos/i);
-        const winAsset = findAsset(/MoonCode.*windows\.exe$/i) || findAsset(/windows.*\.exe$/i);
+        const linuxAsset = findAsset(/linux/i);
+        const macAsset = findAsset(/macos/i);
+        const winAsset = findAsset(/windows/i);
 
         if (linuxAsset) {
           document.getElementById('dl-linux').href = linuxAsset.browser_download_url;
