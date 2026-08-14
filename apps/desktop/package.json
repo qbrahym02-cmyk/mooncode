@@ -1,6 +1,6 @@
 {
   "name": "@mooncode/desktop",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "private": true,
   "description": "Moon Code desktop app — local-first agentic workspace",
   "main": "app/src/main.cjs",
@@ -91,12 +91,6 @@
       "vendor": "Moon Code",
       "synopsis": "Local-first agentic workspace for code and design",
       "description": "Moon Code is a local-first agentic workspace for code and design."
-    },
-    "AppImage": {
-      "artifactName": "${productName}-${version}-${arch}.AppImage"
-    },
-    "deb": {
-      "depends": ["git"]
     }
   }
 }

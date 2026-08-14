@@ -64,7 +64,7 @@ copyIfExists(path.join(monorepoRoot, "docs"), path.join(appDir, "docs"));
 // Create a minimal package.json for the app dir (electron needs it).
 const appPkg = {
   name: "mooncode-desktop-app",
-  version: "1.2.3",
+  version: "1.2.4",
   private: true,
   main: "src/main.cjs",
 };
