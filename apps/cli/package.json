@@ -1,0 +1,34 @@
+{
+  "name": "mooncode",
+  "version": "5.0.0",
+  "description": "Moon Code CLI — local-first agentic workspace for code and design",
+  "license": "MIT",
+  "author": "Brahim <qbrahym02-cmyk@users.noreply.github.com>",
+  "homepage": "https://github.com/qbrahym02-cmyk/mooncode",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qbrahym02-cmyk/mooncode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/qbrahym02-cmyk/mooncode/issues"
+  },
+  "keywords": [
+    "agent", "ai", "coding-agent", "local-first", "cli", "tui",
+    "openai", "anthropic", "claude", "gemini", "mcp", "arabic", "rtl"
+  ],
+  "type": "module",
+  "bin": {
+    "mooncode": "./src/cli.js"
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node ./src/cli.js"
+  }
+}
