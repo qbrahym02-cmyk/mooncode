@@ -1,5 +1,5 @@
 {
-  "name": "@mooncode/acp",
+  "name": "@mooncode/slack",
   "version": "3.3.0",
   "private": true,
   "type": "module",
