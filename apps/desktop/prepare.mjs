@@ -13,7 +13,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const desktopDir = path.resolve(here, "..");
+// here = apps/desktop/
+const desktopDir = here;
 const monorepoRoot = path.resolve(desktopDir, "../..");
 const appDir = path.join(desktopDir, "app");
 
@@ -63,7 +64,7 @@ copyIfExists(path.join(monorepoRoot, "docs"), path.join(appDir, "docs"));
 // Create a minimal package.json for the app dir (electron needs it).
 const appPkg = {
   name: "mooncode-desktop-app",
-  version: "1.2.2",
+  version: "1.2.3",
   private: true,
   main: "src/main.cjs",
 };

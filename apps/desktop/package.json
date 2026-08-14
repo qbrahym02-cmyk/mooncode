@@ -1,6 +1,6 @@
 {
   "name": "@mooncode/desktop",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "private": true,
   "description": "Moon Code desktop app — local-first agentic workspace",
   "main": "app/src/main.cjs",
