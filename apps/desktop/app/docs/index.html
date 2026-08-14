@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Moon Code · مون كود — مساحة عمل الوكلاء</title>
+  <meta name="description" content="مساحة عمل محلية للبرمجة والتصميم بالوكلاء — حمّلها الآن بنقرة واحدة">
+  <meta name="theme-color" content="#0a0b0f">
+  <meta property="og:title" content="Moon Code · مون كود">
+  <meta property="og:description" content="مساحة عمل محلية للبرمجة والتصميم بالوكلاء">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌙</text></svg>">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0a0b0f;
+      --bg-card: #14161d;
+      --bg-hover: #1a1d27;
+      --accent: #8b7cff;
+      --accent-light: #b8adff;
+      --accent-glow: rgba(139,124,255,0.4);
+      --text: #e4e6ed;
+      --text-dim: #8b8e99;
+      --border: #252834;
+      --green: #5fd6ad;
+      --amber: #e8b86d;
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Segoe UI', 'Noto Sans Arabic', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    ::selection { background: var(--accent); color: white; }
+
+    /* Animated starfield background */
+    .stars {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 0;
+      background-image:
+        radial-gradient(2px 2px at 20px 30px, rgba(255,255,255,0.3), transparent),
+        radial-gradient(2px 2px at 60px 70px, rgba(139,124,255,0.3), transparent),
+        radial-gradient(1px 1px at 50px 50px, rgba(255,255,255,0.2), transparent),
+        radial-gradient(1px 1px at 130px 80px, rgba(95,214,173,0.2), transparent),
+        radial-gradient(2px 2px at 90px 10px, rgba(255,255,255,0.3), transparent);
+      background-size: 200px 200px;
+      animation: twinkle 8s ease-in-out infinite alternate;
+    }
+    @keyframes twinkle {
+      0% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
+
+    /* Glow orbs */
+    .orb {
+      position: fixed; border-radius: 50%; filter: blur(80px);
+      pointer-events: none; z-index: 0;
+    }
+    .orb-1 { top: -100px; right: -100px; width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(139,124,255,0.2) 0%, transparent 70%);
+      animation: float1 20s ease-in-out infinite; }
+    .orb-2 { bottom: -150px; left: -150px; width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(95,214,173,0.12) 0%, transparent 70%);
+      animation: float2 25s ease-in-out infinite; }
+    .orb-3 { top: 40%; left: 50%; width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(232,184,109,0.08) 0%, transparent 70%);
+      animation: float3 30s ease-in-out infinite; }
+    @keyframes float1 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-50px,30px); } }
+    @keyframes float2 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(60px,-40px); } }
+    @keyframes float3 { 0%,100% { transform: translate(-50%,0); } 50% { transform: translate(-30%,-50px); } }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+
+    /* Nav */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      backdrop-filter: blur(12px); background: rgba(10,11,15,0.7);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 0; max-width: 1100px; margin: 0 auto; padding: 16px 24px;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; }
+    .nav-logo-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-light));
+      display: flex; align-items: center; justify-content: center; font-size: 20px;
+    }
+    .nav-links { display: flex; gap: 28px; }
+    .nav-links a {
+      color: var(--text-dim); text-decoration: none; font-size: 15px;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      padding: 8px 20px; border-radius: var(--radius-sm);
+      background: var(--accent); color: white; text-decoration: none;
+      font-weight: 600; font-size: 14px; transition: all 0.2s;
+    }
+    .nav-cta:hover { background: var(--accent-light); transform: translateY(-1px); }
+    @media (max-width: 768px) { .nav-links { display: none; } }
+
+    /* Hero */
+    .hero { text-align: center; padding: 100px 0 60px; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 16px; border-radius: 20px;
+      background: rgba(139,124,255,0.1); border: 1px solid rgba(139,124,255,0.3);
+      font-size: 13px; color: var(--accent-light); margin-bottom: 24px;
+      animation: fadeInUp 0.6s ease;
+    }
+    .hero-badge .pulse {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    .hero h1 {
+      font-size: clamp(48px, 8vw, 84px); font-weight: 800;
+      line-height: 1.1; margin-bottom: 24px;
+      background: linear-gradient(135deg, #fff 0%, var(--accent-light) 50%, var(--accent) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text; animation: fadeInUp 0.6s ease 0.1s both;
+    }
+    .hero-tagline {
+      font-size: clamp(18px, 3vw, 24px); color: var(--text-dim);
+      max-width: 600px; margin: 0 auto 40px;
+      animation: fadeInUp 0.6s ease 0.2s both;
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Install box */
+    .install-section {
+      animation: fadeInUp 0.6s ease 0.3s both;
+    }
+    .install-box {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px 24px; margin: 0 auto 16px;
+      max-width: 480px; display: flex; align-items: center; gap: 16px;
+      font-family: 'SF Mono', 'Fira Code', monospace; font-size: 18px;
+      transition: all 0.3s;
+    }
+    .install-box:hover { border-color: var(--accent); box-shadow: 0 8px 32px var(--accent-glow); }
+    .install-box .prompt { color: var(--accent); user-select: none; }
+    .install-box .cmd { color: var(--text); flex: 1; }
+    .copy-btn {
+      background: var(--bg-hover); border: 1px solid var(--border);
+      color: var(--text-dim); padding: 8px 16px; border-radius: var(--radius-sm);
+      cursor: pointer; font-size: 14px; transition: all 0.2s; font-family: inherit;
+    }
+    .copy-btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
+
+    .hero-stats {
+      display: flex; justify-content: center; gap: 40px; flex-wrap: wrap;
+      margin-top: 40px; animation: fadeInUp 0.6s ease 0.4s both;
+    }
+    .stat { text-align: center; }
+    .stat-num {
+      font-size: 32px; font-weight: 800; color: var(--accent-light);
+    }
+    .stat-label { font-size: 14px; color: var(--text-dim); }
+
+    /* Section common */
+    section { padding: 80px 0; }
+    .section-title {
+      text-align: center; font-size: clamp(28px, 5vw, 42px);
+      font-weight: 800; margin-bottom: 12px;
+    }
+    .section-subtitle {
+      text-align: center; color: var(--text-dim); margin-bottom: 48px;
+      font-size: 17px; max-width: 600px; margin-left: auto; margin-right: auto;
+    }
+    .gradient-text {
+      background: linear-gradient(135deg, var(--accent-light), var(--accent));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Download cards */
+    .cards {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;
+    }
+    @media (max-width: 900px) { .cards { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 500px) { .cards { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 32px 24px; transition: all 0.3s;
+      display: flex; flex-direction: column; align-items: center; text-align: center;
+      position: relative; overflow: hidden;
+    }
+    .card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: var(--accent); transform: scaleX(0); transition: transform 0.3s;
+    }
+    .card:hover::before { transform: scaleX(1); }
+    .card:hover {
+      background: var(--bg-hover); border-color: var(--accent);
+      transform: translateY(-6px); box-shadow: 0 16px 48px rgba(139,124,255,0.15);
+    }
+    .card-icon {
+      width: 64px; height: 64px; border-radius: 16px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px; margin-bottom: 20px;
+    }
+    .card-icon.linux { background: rgba(255,180,50,0.15); }
+    .card-icon.mac { background: rgba(139,124,255,0.15); }
+    .card-icon.win { background: rgba(95,214,173,0.15); }
+    .card-icon.tui { background: rgba(232,184,109,0.15); }
+    .card-title { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
+    .card-desc { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; min-height: 40px; }
+    .card-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 24px; border-radius: var(--radius-sm); font-size: 15px; font-weight: 600;
+      text-decoration: none; transition: all 0.2s; width: 100%; justify-content: center;
+      cursor: pointer; border: none; font-family: inherit;
+    }
+    .card-btn.primary { background: var(--accent); color: white; }
+    .card-btn.primary:hover { background: var(--accent-light); }
+    .card-btn.secondary {
+      background: var(--bg-hover); color: var(--text); border: 1px solid var(--border);
+    }
+    .card-btn.secondary:hover { border-color: var(--accent); }
+    .card-version { font-size: 12px; color: var(--text-dim); margin-top: 12px; }
+    .card-cmd {
+      font-family: 'SF Mono', monospace; font-size: 13px;
+      background: var(--bg); padding: 10px 14px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); width: 100%; text-align: center;
+      color: var(--accent-light); margin-top: 8px; word-break: break-all;
+    }
+
+    /* Features */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    }
+    @media (max-width: 768px) { .features-grid { grid-template-columns: 1fr; } }
+    .feature {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 28px; transition: all 0.3s;
+    }
+    .feature:hover {
+      border-color: var(--accent); transform: translateY(-4px);
+    }
+    .feature-icon {
+      width: 52px; height: 52px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px; margin-bottom: 16px;
+      background: rgba(139,124,255,0.1);
+    }
+    .feature-title { font-weight: 700; font-size: 17px; margin-bottom: 8px; }
+    .feature-desc { color: var(--text-dim); font-size: 14px; line-height: 1.6; }
+
+    /* Terminal demo */
+    .terminal-demo {
+      background: #0d0e12; border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.4); max-width: 800px; margin: 0 auto;
+    }
+    .terminal-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px 16px; background: #15171e; border-bottom: 1px solid var(--border);
+    }
+    .terminal-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .terminal-dot.red { background: #ff5f56; }
+    .terminal-dot.yellow { background: #ffbd2e; }
+    .terminal-dot.green { background: #27c93f; }
+    .terminal-title { color: var(--text-dim); font-size: 13px; margin-right: auto; padding-left: 8px; }
+    .terminal-body {
+      padding: 24px; font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 14px; line-height: 1.8; min-height: 320px;
+    }
+    .terminal-line { margin-bottom: 4px; }
+    .terminal-prompt { color: var(--accent); }
+    .terminal-cmd { color: var(--text); }
+    .terminal-output { color: var(--text-dim); }
+    .terminal-success { color: var(--green); }
+    .terminal-warn { color: var(--amber); }
+    .terminal-cursor {
+      display: inline-block; width: 8px; height: 16px;
+      background: var(--accent); animation: blink 1s steps(2) infinite;
+      vertical-align: middle;
+    }
+    @keyframes blink { 0%,50% { opacity: 1; } 51%,100% { opacity: 0; } }
+
+    /* FAQ */
+    .faq-list { max-width: 720px; margin: 0 auto; }
+    .faq-item {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); margin-bottom: 12px; overflow: hidden;
+    }
+    .faq-q {
+      padding: 20px 24px; cursor: pointer; display: flex;
+      justify-content: space-between; align-items: center; font-weight: 600;
+    }
+    .faq-q:hover { background: var(--bg-hover); }
+    .faq-a {
+      max-height: 0; overflow: hidden; transition: max-height 0.3s;
+      color: var(--text-dim); padding: 0 24px;
+    }
+    .faq-item.open .faq-a { max-height: 300px; padding: 0 24px 20px; }
+    .faq-item.open .faq-toggle { transform: rotate(45deg); }
+    .faq-toggle { font-size: 20px; color: var(--accent); transition: transform 0.3s; }
+
+    /* Update notification banner */
+    .update-banner {
+      position: fixed; bottom: 24px; right: 24px; z-index: 1000;
+      background: var(--bg-card); border: 1px solid var(--accent);
+      border-radius: var(--radius); padding: 16px 20px; max-width: 360px;
+      box-shadow: 0 12px 40px var(--accent-glow);
+      display: none; animation: slideUp 0.4s ease;
+    }
+    .update-banner.show { display: block; }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .update-banner-title { font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+    .update-banner-desc { font-size: 14px; color: var(--text-dim); margin-bottom: 12px; }
+    .update-banner-btn {
+      display: inline-block; padding: 6px 16px; border-radius: var(--radius-sm);
+      background: var(--accent); color: white; text-decoration: none;
+      font-size: 14px; font-weight: 600;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center; padding: 48px 24px; color: var(--text-dim);
+      font-size: 14px; border-top: 1px solid var(--border); margin-top: 40px;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+    .footer-links {
+      display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .copied { color: var(--green) !important; }
+
+    /* Scroll reveal */
+    .reveal { opacity: 0; transform: translateY(30px); transition: all 0.6s ease; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+  <div class="stars"></div>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <!-- Nav -->
+  <nav>
+    <div class="nav-inner">
+      <a href="#" class="nav-logo">
+        <div class="nav-logo-icon">🌙</div>
+        <span>Moon Code</span>
+      </a>
+      <div class="nav-links">
+        <a href="#download">تحميل</a>
+        <a href="#features">المميزات</a>
+        <a href="#demo">تجربة</a>
+        <a href="#faq">أسئلة</a>
+        <a href="https://github.com/qbrahym02-cmyk/mooncode">GitHub</a>
+      </div>
+      <a href="#download" class="nav-cta">تحميل</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-badge">
+        <span class="pulse"></span>
+        <span>إصدار 1.2.0 متاح — مع تحديث تلقائي من أي مكان</span>
+      </div>
+      <h1>مون كود<br><span class="gradient-text">مساحة عمل الوكلاء</span></h1>
+      <p class="hero-tagline">
+        مساحة عمل محلية للبرمجة والتصميم بالوكلاء. يعمل وكيل ذكي على ملفاتك مباشرةً،
+        مع موافقة صريحة على كل عملية. بياناتك تبقى على جهازك.
+      </p>
+
+      <div class="install-section">
+        <div class="install-box">
+          <span class="prompt">$</span>
+          <span class="cmd" id="installCmd">npx mooncode</span>
+          <button class="copy-btn" onclick="copyCmd('installCmd', this)">نسخ</button>
+        </div>
+        <p style="text-align:center; color: var(--text-dim); font-size: 14px;">
+          أو ثبّته دائمًا: <code style="color: var(--accent-light);">npm i -g mooncode</code>
+        </p>
+      </div>
+
+      <div class="hero-stats">
+        <div class="stat">
+          <div class="stat-num">20</div>
+          <div class="stat-label">حزمة برمجية</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">121+</div>
+          <div class="stat-label">اختبار ناجح</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">6</div>
+          <div class="stat-label">مزودي نماذج</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">0</div>
+          <div class="stat-label">تبعيات خارجية</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Download -->
+    <section id="download">
+      <h2 class="section-title">اختر طريقة <span class="gradient-text">التحميل</span></h2>
+      <p class="section-subtitle">4 طرق سهلة — اختر ما يناسبك</p>
+
+      <div class="cards">
+        <div class="card reveal">
+          <div class="card-icon linux">🐧</div>
+          <h3 class="card-title">Linux</h3>
+          <p class="card-desc">AppImage + deb</p>
+          <a class="card-btn primary" id="dl-linux" href="https://github.com/qbrahym02-cmyk/mooncode/releases/latest" target="_blank">
+            ⬇ تحميل
+          </a>
+          <div class="card-version" id="ver-linux">جارٍ التحقق...</div>
+        </div>
+
+        <div class="card reveal">
+          <div class="card-icon mac">🍎</div>
+          <h3 class="card-title">macOS</h3>
+          <p class="card-desc">DMG لـ Intel + Apple Silicon</p>
+          <a class="card-btn primary" id="dl-mac" href="https://github.com/qbrahym02-cmyk/mooncode/releases/latest" target="_blank">
+            ⬇ تحميل
+          </a>
+          <div class="card-version" id="ver-mac">جارٍ التحقق...</div>
+        </div>
+
+        <div class="card reveal">
+          <div class="card-icon win">🪟</div>
+          <h3 class="card-title">Windows</h3>
+          <p class="card-desc">مثبّت + نسخة محمولة</p>
+          <a class="card-btn primary" id="dl-win" href="https://github.com/qbrahym02-cmyk/mooncode/releases/latest" target="_blank">
+            ⬇ تحميل
+          </a>
+          <div class="card-version" id="ver-win">جارٍ التحقق...</div>
+        </div>
+
+        <div class="card reveal">
+          <div class="card-icon tui">⌨️</div>
+          <h3 class="card-title">Terminal (TUI)</h3>
+          <p class="card-desc">سطر واحد — كل المنصات</p>
+          <div class="card-cmd" id="tui-cmd">npx mooncode</div>
+          <button class="card-btn secondary" style="margin-top: 12px;" onclick="copyCmd('tui-cmd', this)">
+            نسخ الأمر
+          </button>
+          <div class="card-version">macOS · Linux · Windows</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features">
+      <h2 class="section-title">لماذا <span class="gradient-text">Moon Code</span>؟</h2>
+      <p class="section-subtitle">كل ما تحتاجه في مكان واحد — محلي، آمن، وقوي</p>
+
+      <div class="features-grid">
+        <div class="feature reveal">
+          <div class="feature-icon">🏠</div>
+          <div class="feature-title">Local-first</div>
+          <div class="feature-desc">بياناتك تبقى على جهازك. لا سحابة، لا تتبع، لا خوادم وسيطة. أنت تملك كل شيء.</div>
+        </div>
+        <div class="feature reveal">
+          <div class="feature-icon">🤖</div>
+          <div class="feature-title">6 مزوّدين</div>
+          <div class="feature-desc">OpenAI، Anthropic، Google، OpenRouter، Ollama، أو أي مزوّد متوافق مع OpenAI.</div>
+        </div>
+        <div class="feature reveal">
+          <div class="feature-icon">🔒</div>
+          <div class="feature-title">موافقة صريحة</div>
+          <div class="feature-desc">كل تعديل أو تنفيذ يطلب إذنك أولًا. لا يحدث شيء في الخفاء.</div>
+        </div>
+        <div class="feature reveal">
+          <div class="feature-icon">🔄</div>
+          <div class="feature-title">Git مدمج</div>
+          <div class="feature-desc">كل كتابة تُنشئ checkpoint قابل للتراجع. لا فقدان للبيانات أبدًا.</div>
+        </div>
+        <div class="feature reveal">
+          <div class="feature-icon">🧩</div>
+          <div class="feature-title">MCP مدعوم</div>
+          <div class="feature-desc">وصّل أدوات خارجية عبر Model Context Protocol. وسّع قدرات الوكيل.</div>
+        </div>
+        <div class="feature reveal">
+          <div class="feature-icon">🇸🇦</div>
+          <div class="feature-title">دعم العربية</div>
+          <div class="feature-desc">واجهة عربية كاملة مع دعم RTL من اليوم الأول. مصنوع للناطقين بالعربية.</div>
+        </div>
+        <div class="feature reveal">
+          <div class="feature-icon">🛡️</div>
+          <div class="feature-title">سياسة مخاطر خماسية</div>
+          <div class="feature-desc">observe / modify / execute / external / blocked — في قلب النواة.</div>
+        </div>
+        <div class="feature reveal">
+          <div class="feature-icon">🎨</div>
+          <div class="feature-title">40+ امتداد</div>
+          <div class="feature-desc">HTML، صور، Markdown، JSON، كود — كلها تُعرض في معاينة آمنة.</div>
+        </div>
+        <div class="feature reveal">
+          <div class="feature-icon">⚡</div>
+          <div class="feature-title">تحديث تلقائي</div>
+          <div class="feature-desc">حدّث من أي مكان في العالم: <code>mooncode update</code> — وينتهي الأمر.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Demo -->
+    <section id="demo">
+      <h2 class="section-title">جرّب <span class="gradient-text">Moon Code</span></h2>
+      <p class="section-subtitle">هكذا يبدو استخدام Moon Code في الطرفية</p>
+
+      <div class="terminal-demo reveal">
+        <div class="terminal-header">
+          <span class="terminal-dot red"></span>
+          <span class="terminal-dot yellow"></span>
+          <span class="terminal-dot green"></span>
+          <span class="terminal-title">mooncode — bash</span>
+        </div>
+        <div class="terminal-body" id="terminal">
+          <div class="terminal-line"><span class="terminal-prompt">$</span> <span class="terminal-cmd">npx mooncode</span></div>
+          <div class="terminal-output">🌙 Moon Code v1.2.0 — مساحة عمل الوكلاء</div>
+          <div class="terminal-output">→ جارٍ التثبيت...</div>
+          <div class="terminal-success">✓ تم التثبيت بنجاح!</div>
+          <div class="terminal-line">&nbsp;</div>
+          <div class="terminal-line"><span class="terminal-prompt">$</span> <span class="terminal-cmd">mooncode start</span></div>
+          <div class="terminal-output">▰ ▰  MOON CODE v1.2.0</div>
+          <div class="terminal-output">  workspace  /Users/you/my-project</div>
+          <div class="terminal-output">  server     http://127.0.0.1:4173</div>
+          <div class="terminal-output">  provider   openai</div>
+          <div class="terminal-success">✓ Server ready at http://127.0.0.1:4173</div>
+          <div class="terminal-output">→ Opening browser...</div>
+          <div class="terminal-line">&nbsp;</div>
+          <div class="terminal-line"><span class="terminal-prompt">$</span> <span class="terminal-cmd">mooncode update</span></div>
+          <div class="terminal-output">→ Checking for updates...</div>
+          <div class="terminal-output">★ Update available: 1.1.0 → 1.2.0</div>
+          <div class="terminal-output">→ Downloading mooncode-1.2.0-macos-arm64.tar.gz...</div>
+          <div class="terminal-output">  Downloading: 100% (112KB)</div>
+          <div class="terminal-output">→ Extracting...</div>
+          <div class="terminal-output">→ Installing to /Users/you/.local/bin/mooncode...</div>
+          <div class="terminal-success">✓ Updated to v1.2.0</div>
+          <div class="terminal-output">  Restart Moon Code to use the new version.</div>
+          <div class="terminal-line"><span class="terminal-prompt">$</span> <span class="terminal-cursor"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quick commands -->
+    <section>
+      <h2 class="section-title">أوامر <span class="gradient-text">بسيطة</span></h2>
+      <p class="section-subtitle">3 كلمات فقط — لا أكثر</p>
+
+      <div class="cards" style="grid-template-columns: repeat(3, 1fr); max-width: 800px; margin: 0 auto;">
+        <div class="card reveal" style="padding: 28px;">
+          <div class="card-cmd" style="font-size: 16px; padding: 14px;">mooncode start</div>
+          <p style="margin-top: 16px; color: var(--text-dim); font-size: 14px;">ابدأ كل شيء: الخادم + المتصفح</p>
+        </div>
+        <div class="card reveal" style="padding: 28px;">
+          <div class="card-cmd" style="font-size: 16px; padding: 14px;">mooncode update</div>
+          <p style="margin-top: 16px; color: var(--text-dim); font-size: 14px;">تحديث من أي مكان في العالم</p>
+        </div>
+        <div class="card reveal" style="padding: 28px;">
+          <div class="card-cmd" style="font-size: 16px; padding: 14px;">mooncode tui</div>
+          <p style="margin-top: 16px; color: var(--text-dim); font-size: 14px;">واجهة الطرفية الكاملة</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq">
+      <h2 class="section-title">أسئلة <span class="gradient-text">شائعة</span></h2>
+      <div class="faq-list">
+        <div class="faq-item" onclick="toggleFaq(this)">
+          <div class="faq-q">
+            <span>هل Moon Code مجاني؟</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-a">نعم، Moon Code مجاني تمامًا ومفتوح المصدر تحت رخصة MIT. يمكنك استخدامه وتعديله وتوزيعه بحرية.</div>
+        </div>
+        <div class="faq-item" onclick="toggleFaq(this)">
+          <div class="faq-q">
+            <span>هل بياناتي آمنة؟</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-a">نعم. Moon Code يعمل محليًا (local-first) — بياناتك تبقى على جهازك. لا سحابة، لا تتبع. كل تعديل يطلب موافقتك الصريحة أولًا.</div>
+        </div>
+        <div class="faq-item" onclick="toggleFaq(this)">
+          <div class="faq-q">
+            <span>كيف أحدّث Moon Code؟</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-a">اكتب: <code>mooncode update</code> — وهذا كل شيء. النظام يتحقق من GitHub Releases ويحدّث تلقائيًا من أي مكان في العالم. يمكنك أيضًا استخدام <code>mooncode check-update</code> للتحقق فقط.</div>
+        </div>
+        <div class="faq-item" onclick="toggleFaq(this)">
+          <div class="faq-q">
+            <span>ما المزوّدين المدعومين؟</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-a">OpenAI، Anthropic، Google، OpenRouter، Ollama، وأي مزوّد متوافق مع OpenAI API. يمكنك أيضًا استخدام وضع demo بدون أي مفاتيح.</div>
+        </div>
+        <div class="faq-item" onclick="toggleFaq(this)">
+          <div class="faq-q">
+            <span>هل يدعم العربية؟</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-a">نعم! Moon Code مصنوع للناطقين بالعربية — واجهة عربية كاملة، دعم RTL، ووثائق بالعربية.</div>
+        </div>
+        <div class="faq-item" onclick="toggleFaq(this)">
+          <div class="faq-q">
+            <span>ما هي متطلبات التشغيل؟</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-a">Node.js 20.12 أو أحدث فقط. لا تبعيات تشغيل خارجية. تطبيق سطح المكتب يعمل بدون أي متطلبات إضافية.</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Update notification banner -->
+  <div class="update-banner" id="updateBanner">
+    <div class="update-banner-title">⚡ تحديث متاح</div>
+    <div class="update-banner-desc" id="updateDesc">إصدار جديد من Moon Code متاح</div>
+    <a href="https://github.com/qbrahym02-cmyk/mooncode/releases/latest" target="_blank" class="update-banner-btn">
+      تحميل الآن
+    </a>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <p>Moon Code · مون كود · Copyright © 2026 Brahim · MIT License</p>
+    <div class="footer-links">
+      <a href="https://github.com/qbrahym02-cmyk/mooncode">GitHub</a>
+      <a href="https://github.com/qbrahym02-cmyk/mooncode/releases">Releases</a>
+      <a href="https://github.com/qbrahym02-cmyk/mooncode/issues">Issues</a>
+      <a href="https://github.com/qbrahym02-cmyk/mooncode/discussions">Discussions</a>
+      <a href="https://github.com/qbrahym02-cmyk/mooncode/blob/main/CONTRIBUTING.md">المساهمة</a>
+    </div>
+    <p style="margin-top: 16px; font-size: 13px;">صنع بـ ❤️ للناطقين بالعربية والجميع 🌙</p>
+  </footer>
+
+  <script>
+    // Copy command
+    function copyCmd(elementId, btn) {
+      const el = document.getElementById(elementId);
+      navigator.clipboard.writeText(el.textContent.trim());
+      const orig = btn.textContent;
+      btn.textContent = '✓ تم النسخ';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 2000);
+    }
+
+    // FAQ toggle
+    function toggleFaq(item) {
+      item.classList.toggle('open');
+    }
+
+    // Fetch latest release and update download links
+    async function fetchLatestRelease() {
+      try {
+        const res = await fetch('https://api.github.com/repos/qbrahym02-cmyk/mooncode/releases/latest');
+        if (!res.ok) return;
+        const release = await res.json();
+        const version = release.tag_name;
+        const assets = release.assets || [];
+
+        const findAsset = (pattern) => assets.find(a => pattern.test(a.name));
+        // v1.3.0: prefer the real desktop apps with clean names
+        const linuxAsset = findAsset(/MoonCode.*linux\.AppImage$/i) || findAsset(/MoonCode.*linux\.deb$/i) || findAsset(/linux/i);
+        const macAsset = findAsset(/MoonCode.*apple-silicon\.dmg$/i) || findAsset(/MoonCode.*mac.*\.dmg$/i) || findAsset(/\.dmg$/i);
+        const winAsset = findAsset(/MoonCode.*windows-setup\.exe$/i) || findAsset(/MoonCode.*windows.*\.exe$/i) || findAsset(/\.exe$/i);
+
+        if (linuxAsset) {
+          document.getElementById('dl-linux').href = linuxAsset.browser_download_url;
+          document.getElementById('ver-linux').textContent = `${version} · ${linuxAsset.name}`;
+        } else {
+          document.getElementById('ver-linux').textContent = `${version} — استخدم TUI`;
+        }
+        if (macAsset) {
+          document.getElementById('dl-mac').href = macAsset.browser_download_url;
+          document.getElementById('ver-mac').textContent = `${version} · ${macAsset.name}`;
+        } else {
+          document.getElementById('ver-mac').textContent = `${version} — استخدم TUI`;
+        }
+        if (winAsset) {
+          document.getElementById('dl-win').href = winAsset.browser_download_url;
+          document.getElementById('ver-win').textContent = `${version} · ${winAsset.name}`;
+        } else {
+          document.getElementById('ver-win').textContent = `${version} — استخدم TUI`;
+        }
+      } catch (e) {
+        console.log('Could not fetch release info:', e);
+      }
+    }
+
+    // Check for updates and show banner
+    async function checkForUpdates() {
+      try {
+        const res = await fetch('https://api.github.com/repos/qbrahym02-cmyk/mooncode/releases/latest');
+        if (!res.ok) return;
+        const release = await res.json();
+        const latest = (release.tag_name || '').replace(/^v/, '');
+        const current = '1.2.0';
+        const pa = latest.split('.').map(Number);
+        const pb = current.split('.').map(Number);
+        let newer = false;
+        for (let i = 0; i < 3; i++) {
+          if ((pa[i] || 0) > (pb[i] || 0)) { newer = true; break; }
+          if ((pa[i] || 0) < (pb[i] || 0)) break;
+        }
+        if (newer) {
+          document.getElementById('updateDesc').textContent = `الإصدار ${latest} متاح (لديك ${current})`;
+          document.getElementById('updateBanner').classList.add('show');
+        }
+      } catch (e) {}
+    }
+
+    // Scroll reveal
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) entry.target.classList.add('visible');
+      });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+    // Init
+    fetchLatestRelease();
+    checkForUpdates();
+  </script>
+</body>
+</html>
