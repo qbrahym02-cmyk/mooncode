@@ -382,12 +382,54 @@ app.on('before-quit', async (event) => {
   }
 });
 
-// Ensure server stops even on sudden termination.
-app.on('will-quit', () => {
-  if (server && !server.killed) {
-    server.kill('SIGKILL');
+// v3.0.0: Deep links — mooncode:// protocol
+// Supports: mooncode://session/<id>, mooncode://open/<path>, mooncode://settings
+app.setAsDefaultProtocolClient('mooncode');
+
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handleDeepLink(url);
+});
+
+app.on('second-instance', (event, commandLine, workingDirectory) => {
+  // Check for deep link in command line (Windows)
+  const deepLink = commandLine.find((arg) => arg.startsWith('mooncode://'));
+  if (deepLink) {
+    handleDeepLink(deepLink);
+  }
+  // Focus existing window
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
   }
 });
+
+function handleDeepLink(url) {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.replace(/^\/+/, '');
+    log('Deep link:', url);
+
+    if (parsed.hostname === 'session' && path) {
+      // Open a specific session
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('deep-link', { type: 'session', id: path });
+      }
+    } else if (parsed.hostname === 'open' && path) {
+      // Open a workspace path
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('deep-link', { type: 'open', path });
+      }
+    } else if (parsed.hostname === 'settings') {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('deep-link', { type: 'settings' });
+      }
+    }
+  } catch (error) {
+    logError('Deep link error:', error.message);
+  }
+}
 
 // Prevent multiple instances of the app.
 const gotLock = app.requestSingleInstanceLock();
