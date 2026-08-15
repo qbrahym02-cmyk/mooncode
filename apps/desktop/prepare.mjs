@@ -100,7 +100,7 @@ copyIfExists(path.join(monorepoRoot, "docs"), path.join(appDir, "docs"));
 // CommonJS and the server fails to start inside the packaged app.
 const appPkg = {
   name: "mooncode-desktop-app",
-  version: "5.0.0",
+  version: "5.1.0",
   private: true,
   description: "Moon Code — local-first agentic workspace for code and design",
   author: {
