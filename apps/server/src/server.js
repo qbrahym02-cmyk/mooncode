@@ -98,7 +98,7 @@ const rateLimiter = new RateLimiter({ windowMs: 60_000, max: 200 });
 pluginRegistry.signer = pluginSigner;
 pluginRegistry.trustRegistry = trustRegistry;
 const stateStore = new JsonStore(path.join(dataRoot, "state.json"), {
-  product: { name: "Moon Code", nameArabic: "مون كود", version: "5.1.0" },
+  product: { name: "Moon Code", nameArabic: "مون كود", version: "5.2.0" },
   projects: [{ id: "mooncode-self", name: "Moon Code", path: workspaceRoot, kind: "code-design", createdAt: new Date().toISOString() }],
   sessions: [{ id: "welcome", title: "البدء مع Moon Code", updatedAt: new Date().toISOString(), mode: "build", messages: [], events: [], usage: null }],
   approvals: [],
@@ -180,7 +180,7 @@ async function api(request, response, url) {
     return json(response, 200, {
       ok: true,
       service: "mooncode",
-      version: "5.1.0",
+      version: "5.2.0",
       uptime: Math.round(process.uptime()),
       workspace: workspaceRoot,
       isDemoWorkspace: workspaceRoot === path.resolve(root, "workspace"),
@@ -269,7 +269,7 @@ async function api(request, response, url) {
     const tokens = await designTokens.read().catch(() => null);
     const ctxManifest = await contextFiles.readManifest().catch(() => ({ files: [] }));
     return json(response, 200, {
-      product: { name: "Moon Code", nameArabic: "مون كود", version: "5.1.0" },
+      product: { name: "Moon Code", nameArabic: "مون كود", version: "5.2.0" },
       project: state.projects?.[0],
       sessions: state.sessions ?? [],
       approvals: (state.approvals ?? []).filter((item) => item.status === "pending"),
